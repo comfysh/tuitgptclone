@@ -1,0 +1,67 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:provider/provider.dart';
+
+import '../app_state.dart';
+import '../core/strings.dart';
+import '../lms/lms_client.dart';
+
+String safeFileName(String name) {
+  final n = name.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), '_').trim();
+  return n.isEmpty ? 'file' : (n.length > 120 ? n.substring(n.length - 120) : n);
+}
+
+/// Picks a name with the right extension: prefers the URL's filename
+/// when the link text has no extension.
+String bestFileName(String url, String label) {
+  final fromUrl = LmsClient.fileNameFromUrl(url, fallback: '');
+  if (label.contains('.') && label.lastIndexOf('.') > label.length - 7) return label;
+  if (fromUrl.isNotEmpty) {
+    final ext = fromUrl.substring(fromUrl.lastIndexOf('.'));
+    return label.isEmpty ? fromUrl : '$label$ext';
+  }
+  return label.isEmpty ? 'file' : label;
+}
+
+/// Downloads a file from LMS using your session and opens it.
+Future<void> downloadAndOpen(BuildContext context, String url, String label) async {
+  final app = context.read<AppState>();
+  final s = S.read(context);
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.showSnackBar(SnackBar(content: Text(s['downloading']), duration: const Duration(seconds: 30)));
+  try {
+    final bytes = await app.download(url);
+    final dir = await app.storage.downloadsDir();
+    final file = File('${dir.path}${Platform.pathSeparator}${safeFileName(bestFileName(url, label))}');
+    await file.writeAsBytes(bytes);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(
+      content: Text(s.f('downloaded', {'path': file.path})),
+      action: SnackBarAction(label: s['open'], onPressed: () => OpenFilex.open(file.path)),
+    ));
+    await OpenFilex.open(file.path);
+  } catch (e) {
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(content: Text('${s['error']}: $e')));
+  }
+}
+
+/// Downloads a file into memory (used to give LMS files to the AI).
+Future<(String, Uint8List)?> fetchForAi(BuildContext context, String url, String label) async {
+  final app = context.read<AppState>();
+  final s = S.read(context);
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.showSnackBar(SnackBar(content: Text(s['downloading'])));
+  try {
+    final bytes = await app.download(url);
+    messenger.hideCurrentSnackBar();
+    return (bestFileName(url, label), bytes);
+  } catch (e) {
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(content: Text('${s['error']}: $e')));
+    return null;
+  }
+}

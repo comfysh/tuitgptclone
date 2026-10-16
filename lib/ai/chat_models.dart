@@ -1,0 +1,138 @@
+import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
+
+import 'package:mime/mime.dart';
+
+import '../core/storage.dart';
+
+/// A request to open the AI chat with a prepared prompt (and maybe a file).
+class ChatLaunch {
+  final String prompt;
+  final String? fileName;
+  final Uint8List? bytes;
+  const ChatLaunch(this.prompt, {this.fileName, this.bytes});
+}
+
+class ChatAttachment {
+  final String name;
+  final String mime;
+  final String path; // copy inside the app's chat_files folder
+  final int size;
+  const ChatAttachment({required this.name, required this.mime, required this.path, required this.size});
+
+  bool get isImage => mime.startsWith('image/');
+  bool get isPdf => mime == 'application/pdf';
+
+  Map<String, dynamic> toJson() => {'name': name, 'mime': mime, 'path': path, 'size': size};
+  factory ChatAttachment.fromJson(Map<String, dynamic> j) =>
+      ChatAttachment(name: j['name'] ?? 'file', mime: j['mime'] ?? 'application/octet-stream', path: j['path'] ?? '', size: j['size'] ?? 0);
+
+  /// Saves [bytes] into the app folder so the chat can resend it later.
+  static Future<ChatAttachment> save(String name, Uint8List bytes) async {
+    final storage = await AppStorage.instance();
+    final dir = storage.chatFilesDir;
+    await dir.create(recursive: true);
+    final id = '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1 << 20)}';
+    final safe = name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final f = File('${dir.path}${Platform.pathSeparator}${id}_$safe');
+    await f.writeAsBytes(bytes);
+    final mime = lookupMimeType(name, headerBytes: bytes.take(32).toList()) ?? _guessMime(name);
+    return ChatAttachment(name: name, mime: mime, path: f.path, size: bytes.length);
+  }
+
+  static String _guessMime(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    return switch (ext) {
+      'md' || 'txt' || 'csv' || 'log' => 'text/plain',
+      'py' || 'java' || 'c' || 'cpp' || 'cs' || 'js' || 'ts' || 'dart' || 'kt' || 'go' || 'sql' || 'html' || 'css' =>
+        'text/plain',
+      _ => 'application/octet-stream',
+    };
+  }
+}
+
+class ChatMessage {
+  final String role; // 'user' | 'assistant'
+  String text;
+  final List<ChatAttachment> attachments;
+  final DateTime time;
+  bool error;
+
+  ChatMessage(this.role, this.text, {this.attachments = const [], DateTime? time, this.error = false})
+      : time = time ?? DateTime.now();
+
+  Map<String, dynamic> toJson() => {
+        'role': role,
+        'text': text,
+        'attachments': attachments.map((e) => e.toJson()).toList(),
+        'time': time.toIso8601String(),
+        'error': error,
+      };
+
+  factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
+        j['role'] ?? 'user',
+        j['text'] ?? '',
+        attachments: ((j['attachments'] as List?) ?? const [])
+            .map((e) => ChatAttachment.fromJson(Map<String, dynamic>.from(e)))
+            .toList(),
+        time: DateTime.tryParse(j['time'] ?? ''),
+        error: j['error'] == true,
+      );
+}
+
+class Conversation {
+  final String id;
+  String title;
+  final List<ChatMessage> messages;
+  DateTime updatedAt;
+
+  Conversation({required this.id, this.title = '', List<ChatMessage>? messages, DateTime? updatedAt})
+      : messages = messages ?? [],
+        updatedAt = updatedAt ?? DateTime.now();
+
+  factory Conversation.create() => Conversation(id: DateTime.now().microsecondsSinceEpoch.toString());
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'messages': messages.map((e) => e.toJson()).toList(),
+        'updatedAt': updatedAt.toIso8601String(),
+      };
+
+  factory Conversation.fromJson(Map<String, dynamic> j) => Conversation(
+        id: j['id'] ?? '',
+        title: j['title'] ?? '',
+        messages: ((j['messages'] as List?) ?? const [])
+            .map((e) => ChatMessage.fromJson(Map<String, dynamic>.from(e)))
+            .toList(),
+        updatedAt: DateTime.tryParse(j['updatedAt'] ?? ''),
+      );
+}
+
+class ChatStore {
+  static Future<List<Conversation>> load() async {
+    final storage = await AppStorage.instance();
+    final j = await storage.readJson(storage.chatsFile);
+    final list = ((j['chats'] as List?) ?? const [])
+        .map((e) => Conversation.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+    list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return list;
+  }
+
+  static Future<void> save(List<Conversation> chats) async {
+    final storage = await AppStorage.instance();
+    await storage.writeJson(storage.chatsFile, {'chats': chats.take(100).map((e) => e.toJson()).toList()});
+  }
+
+  static Future<void> deleteFiles(Conversation c) async {
+    for (final m in c.messages) {
+      for (final a in m.attachments) {
+        try {
+          await File(a.path).delete();
+        } catch (_) {}
+      }
+    }
+  }
+}
