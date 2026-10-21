@@ -26,7 +26,14 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   late final NavController _nav;
-  bool _autoLoginTried = false;
+  /// Last automatic re-login; at most one every 15 minutes so a session
+  /// that keeps failing can't trap you in a login loop.
+  DateTime? _lastAutoLogin;
+  bool _autoLoginOpen = false;
+
+  /// Keeps all tabs (and a running AI reply) alive when the layout switches
+  /// between phone and PC width.
+  final _stackKey = GlobalKey();
 
   static const _tabs = [
     Dest.today,
@@ -66,15 +73,18 @@ class _HomeShellState extends State<HomeShell> {
   /// When the LMS session expires and a password is saved, sign in again
   /// automatically through the real login page.
   Future<void> _onApp() async {
-    if (!_app.sessionExpired) {
-      _autoLoginTried = false;
-      return;
-    }
-    if (_autoLoginTried || !_app.settings.autoLogin) return;
-    _autoLoginTried = true;
+    if (!_app.sessionExpired || !_app.settings.autoLogin || _autoLoginOpen) return;
+    final now = DateTime.now();
+    if (_lastAutoLogin != null && now.difference(_lastAutoLogin!) < const Duration(minutes: 15)) return;
+    _lastAutoLogin = now;
     final pass = await Secrets.read(Secrets.lmsPassword);
     if (pass == null || !mounted) return;
-    await LmsWebPage.login(context);
+    _autoLoginOpen = true;
+    try {
+      await LmsWebPage.login(context);
+    } finally {
+      _autoLoginOpen = false;
+    }
   }
 
   Widget _screen(Dest d) => switch (d) {
@@ -106,6 +116,7 @@ class _HomeShellState extends State<HomeShell> {
     final wide = width >= 840;
     final current = _nav.current;
     final stack = IndexedStack(
+      key: _stackKey,
       index: _tabs.indexOf(current).clamp(0, _tabs.length - 1),
       children: [for (final d in _tabs) _screen(d)],
     );

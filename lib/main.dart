@@ -6,8 +6,8 @@ import 'package:provider/provider.dart';
 import 'app_state.dart';
 import 'core/format.dart';
 import 'services/notifier.dart';
+import 'services/web_env.dart';
 import 'ui/home_shell.dart';
-import 'ui/lms_web_page.dart';
 import 'ui/nav.dart';
 import 'ui/welcome_screen.dart';
 

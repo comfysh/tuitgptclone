@@ -45,10 +45,22 @@ String _norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-zа-яё0-9ʻ�
 Course? courseForItem(ScheduleItem item, List<Course> courses) {
   final subj = _norm(item.subject ?? item.title);
   if (subj.isEmpty) return null;
+  final cands = <Course>[];
   for (final c in courses) {
     final cs = _norm(c.subject);
     if (cs.isEmpty) continue;
-    if (cs == subj || cs.contains(subj) || subj.contains(cs)) return c;
+    if (cs == subj) return c; // exact name wins
+    if (cs.contains(subj) || subj.contains(cs)) cands.add(c);
+  }
+  if (cands.length > 1 && item.stream != null) {
+    // e.g. "Web" (cut at a hyphen) matches several courses: the group decides.
+    for (final c in cands) {
+      if (c.streams.any((s) => s.trim() == item.stream)) return c;
+    }
+  }
+  if (cands.isNotEmpty) {
+    return cands.reduce((a, b) =>
+        (_norm(a.subject).length - subj.length).abs() <= (_norm(b.subject).length - subj.length).abs() ? a : b);
   }
   if (item.stream != null) {
     for (final c in courses) {

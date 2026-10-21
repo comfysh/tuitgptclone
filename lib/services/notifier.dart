@@ -54,6 +54,12 @@ class Notifier {
     await android?.requestNotificationsPermission();
   }
 
+  /// Removes shown and scheduled notifications (sign-out).
+  static Future<void> cancelAll() async {
+    await init();
+    await _plugin.cancelAll();
+  }
+
   static int _id(String key) => key.hashCode & 0x3fffffff;
 
   static Future<void> show(String key, String title, String body, {bool reminder = false}) async {
@@ -110,7 +116,10 @@ class Notifier {
   /// Compares the previous and new snapshot, shows notifications, and
   /// remembers which reminders were already sent.
   static Future<int> processChanges(LmsSnapshot? old, LmsSnapshot now, Settings settings, AppStorage storage) async {
-    if (!settings.notifications) return 0;
+    if (!settings.notifications) {
+      await scheduleClassReminders(now, settings); // cancels pending class reminders
+      return 0;
+    }
     final s = S(settings.language);
     final state = await storage.readJson(storage.notifyStateFile);
     final sent = Set<String>.from(state['sent'] ?? const []);
@@ -121,11 +130,20 @@ class Notifier {
     ];
     var shown = 0;
     for (final c in changes.take(12)) {
-      await show(c.key, _title(c, s), _text(c, s), reminder: c.kind == ChangeKind.reminder);
-      if (c.kind == ChangeKind.reminder) sent.add(c.key);
-      shown++;
+      try {
+        await show(c.key, _title(c, s), _text(c, s), reminder: c.kind == ChangeKind.reminder);
+        if (c.kind == ChangeKind.reminder) sent.add(c.key);
+        shown++;
+      } catch (_) {}
     }
-    state['sent'] = sent.toList().reversed.take(400).toList();
+    // Forget reminders whose deadline is long gone, keep the newest 400 (insertion order).
+    final cutoff = DateTime.now().subtract(const Duration(days: 2));
+    sent.removeWhere((k) {
+      final d = DateTime.tryParse(k.substring(k.lastIndexOf('|') + 1));
+      return d != null && d.isBefore(cutoff);
+    });
+    final list = sent.toList();
+    state['sent'] = list.length > 400 ? list.sublist(list.length - 400) : list;
     state['sessionNotified'] = false;
     await storage.writeJson(storage.notifyStateFile, state);
     await scheduleClassReminders(now, settings);

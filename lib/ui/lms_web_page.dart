@@ -10,24 +10,8 @@ import '../core/storage.dart';
 import '../core/strings.dart';
 import '../lms/lms_client.dart';
 import '../lms/parsers.dart';
+import '../services/web_env.dart';
 import 'files.dart';
-
-/// WebView2 on Windows needs a writable data folder; we keep it in app data.
-class WebEnv {
-  static WebViewEnvironment? env;
-
-  static Future<void> init() async {
-    if (!io.Platform.isWindows) return;
-    try {
-      final storage = await AppStorage.instance();
-      env = await WebViewEnvironment.create(
-        settings: WebViewEnvironmentSettings(userDataFolder: '${storage.root.path}\\webview'),
-      );
-    } catch (_) {}
-  }
-
-  static CookieManager get cookies => CookieManager.instance(webViewEnvironment: env);
-}
 
 /// Shows the real lms.tuit.uz in an embedded browser.
 /// In [loginMode] it captures the session cookie after you sign in
@@ -122,7 +106,7 @@ class _LmsWebPageState extends State<LmsWebPage> {
       for (final k in raw) {
         try {
           cookies.add(makeCookie(k.name, '${k.value}',
-              expiresMs: k.expiresDate, httpOnly: k.isHttpOnly, secure: k.isSecure, path: k.path));
+              expires: k.expiresDate, httpOnly: k.isHttpOnly, secure: k.isSecure, path: k.path));
         } catch (_) {}
       }
       if (!cookies.any((k) => k.name.toLowerCase().contains('session'))) return;
@@ -142,7 +126,10 @@ class _LmsWebPageState extends State<LmsWebPage> {
   }
 
   Future<DownloadStartResponse?> _onDownload(InAppWebViewController c, DownloadStartRequest req) async {
-    final name = req.suggestedFilename ?? LmsClient.fileNameFromUrl(req.url.toString());
+    final sug = req.suggestedFilename;
+    final name = fileNameFromDisposition(req.contentDisposition) ??
+        fileNameFromDisposition(sug) ??
+        ((sug != null && sug.isNotEmpty) ? sug : LmsClient.fileNameFromUrl(req.url.toString()));
     if (mounted) await downloadAndOpen(context, req.url.toString(), name);
     return DownloadStartResponse(handled: true, action: DownloadStartResponseAction.CANCEL);
   }

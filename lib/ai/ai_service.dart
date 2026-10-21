@@ -11,7 +11,11 @@ import 'file_text.dart';
 
 class AiException implements Exception {
   final String message;
-  AiException(this.message);
+
+  /// The API rejected the request itself (bad input, too large, blocked).
+  /// Resending the same turn would fail again.
+  final bool badRequest;
+  AiException(this.message, {this.badRequest = false});
   @override
   String toString() => message;
 }
@@ -25,6 +29,10 @@ class AiService {
   static const geminiBase = 'https://generativelanguage.googleapis.com/v1beta';
   static const maxInlineBytes = 18 * 1024 * 1024;
   static const maxTextChars = 200000;
+
+  // Image types each API accepts inline; others (svg, bmp, tiff…) are rejected.
+  static const _geminiImages = {'image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'};
+  static const _openaiImages = {'image/png', 'image/jpeg', 'image/webp', 'image/gif'};
 
   final _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 30),
@@ -46,7 +54,7 @@ class AiService {
       if (text != null) {
         parts.add({'text': _fileBlock(a.name, text)});
       } else if (bytes.length <= maxInlineBytes &&
-          (a.isPdf || a.isImage || a.mime.startsWith('audio/') || a.mime.startsWith('video/'))) {
+          (a.isPdf || _geminiImages.contains(a.mime) || a.mime.startsWith('audio/') || a.mime.startsWith('video/'))) {
         parts.add({
           'inlineData': {'mimeType': a.mime, 'data': base64Encode(bytes)}
         });
@@ -68,7 +76,7 @@ class AiService {
       final text = extractText(a.name, a.mime, bytes);
       if (text != null) {
         parts.add({'type': 'text', 'text': _fileBlock(a.name, text)});
-      } else if (a.isImage && bytes.length <= maxInlineBytes) {
+      } else if (_openaiImages.contains(a.mime) && bytes.length <= maxInlineBytes) {
         parts.add({
           'type': 'image_url',
           'image_url': {'url': 'data:${a.mime};base64,${base64Encode(bytes)}'}
@@ -128,12 +136,18 @@ class AiService {
       cancelToken: cancel,
     );
     yield* _sse(r, (j) {
-      final parts = (j['candidates'] as List?)?.firstOrNull?['content']?['parts'] as List?;
-      if (parts == null) {
-        final block = j['promptFeedback']?['blockReason'];
-        return block != null ? '\n[blocked: $block]' : null;
-      }
-      return parts.where((p) => p['thought'] != true).map((p) => p['text'] ?? '').join();
+      final cand = (j['candidates'] as List?)?.firstOrNull;
+      final parts = cand?['content']?['parts'] as List?;
+      final text = parts == null ? '' : parts.where((p) => p['thought'] != true).map((p) => p['text'] ?? '').join();
+      // A blocked prompt is an error: the turn is then not sent again.
+      final block = j['promptFeedback']?['blockReason'];
+      if (block != null) throw AiException('Gemini blocked this request ($block).', badRequest: true);
+      // Explain why an answer stopped early instead of leaving an empty bubble.
+      final reason = cand?['finishReason'];
+      final note =
+          reason != null && reason != 'STOP' && reason != 'FINISH_REASON_UNSPECIFIED' ? '\n\n[stopped: $reason]' : '';
+      final out = '$text$note';
+      return out.isEmpty ? null : out;
     });
   }
 
@@ -161,7 +175,8 @@ class AiService {
     final lines = body.stream.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter());
     if ((r.statusCode ?? 0) >= 400) {
       final text = await lines.join('\n');
-      throw AiException(_errorText(r.statusCode, text));
+      final code = r.statusCode ?? 0;
+      throw AiException(_errorText(r.statusCode, text), badRequest: code == 400 || code == 413 || code == 422);
     }
     await for (final line in lines) {
       if (!line.startsWith('data:')) continue;

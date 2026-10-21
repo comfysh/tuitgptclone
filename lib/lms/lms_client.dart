@@ -30,6 +30,12 @@ class LmsClient {
   final PersistCookieJar cookieJar;
   late final Dio _dio;
 
+  /// Bumped on sign-out. Responses to requests sent before that are dropped
+  /// before the cookie manager sees them, so they can't save the old session
+  /// back to disk.
+  int get epoch => _epoch;
+  int _epoch = 0;
+
   LmsClient(String cookieDir) : cookieJar = PersistCookieJar(storage: FileStorage(cookieDir)) {
     _dio = Dio(BaseOptions(
       baseUrl: lmsBase,
@@ -42,12 +48,33 @@ class LmsClient {
         'Accept-Language': 'uz,ru;q=0.9,en;q=0.8',
       },
     ));
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (o, h) {
+        o.extra['epoch'] = _epoch;
+        h.next(o);
+      },
+      onResponse: (r, h) {
+        if (r.requestOptions.extra['epoch'] != _epoch) {
+          h.reject(DioException(requestOptions: r.requestOptions, message: 'Signed out'));
+        } else {
+          h.next(r);
+        }
+      },
+      onError: (e, h) {
+        if (e.requestOptions.extra['epoch'] != _epoch) {
+          h.reject(DioException(requestOptions: e.requestOptions, message: 'Signed out'));
+        } else {
+          h.next(e);
+        }
+      },
+    ));
     _dio.interceptors.add(CookieManager(cookieJar));
   }
 
   /// Stores cookies captured from the login WebView.
+  /// Saving replaces cookies with the same name, so requests running at the
+  /// same time never see an empty jar.
   Future<void> importCookies(List<Cookie> cookies) async {
-    await cookieJar.delete(lmsUri, true);
     await cookieJar.saveFromResponse(lmsUri, cookies);
   }
 
@@ -59,6 +86,7 @@ class LmsClient {
   Future<List<Cookie>> currentCookies() => cookieJar.loadForRequest(lmsUri);
 
   Future<void> logout() async {
+    _epoch++;
     try {
       await cookieJar.deleteAll();
     } catch (_) {}
@@ -207,18 +235,20 @@ class LmsClient {
   static String fileNameFromUrl(String url, {String fallback = 'file'}) {
     final seg = Uri.tryParse(url)?.pathSegments.where((s) => s.isNotEmpty).toList() ?? const [];
     if (seg.isEmpty) return fallback;
-    final name = Uri.decodeComponent(seg.last);
+    final name = seg.last; // pathSegments are already percent-decoded
     return name.contains('.') ? name : fallback;
   }
 }
 
 /// Converts cookies captured by the WebView into dart:io cookies.
-Cookie makeCookie(String name, String value, {String? domain, String? path, int? expiresMs, bool? httpOnly, bool? secure}) {
+/// [expires] is milliseconds on Android but seconds on Windows (WebView2/CDP).
+Cookie makeCookie(String name, String value, {String? domain, String? path, num? expires, bool? httpOnly, bool? secure}) {
   final c = Cookie(name, value);
   c.domain = domain;
   c.path = path ?? '/';
-  if (expiresMs != null && expiresMs > 0) {
-    c.expires = DateTime.fromMillisecondsSinceEpoch(expiresMs);
+  if (expires != null && expires > 0) {
+    final ms = expires < 100000000000 ? expires * 1000 : expires;
+    c.expires = DateTime.fromMillisecondsSinceEpoch(ms.round());
   }
   c.httpOnly = httpOnly ?? false;
   c.secure = secure ?? true;

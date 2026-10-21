@@ -70,9 +70,8 @@ class _TodayScreenState extends State<TodayScreen> {
         Text('$greeting${firstName.isNotEmpty ? ', $firstName' : ''}!',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Row(children: [
+        Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
           Text('${fmtWeekday(now, s.lang)}, ${fmtDateFull(now, s.lang)}'),
-          const SizedBox(width: 8),
           if (snap.schedule.isNotEmpty) Pill(side == WeekSide.right ? s['evenWeek'] : s['oddWeek']),
         ]),
         const SizedBox(height: 14),
@@ -144,10 +143,16 @@ class _NowCard extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Pill(isNow ? s['now'] : s['next'], color: color, icon: isNow ? Icons.circle : Icons.schedule),
-            const Spacer(),
-            Text(isNow
-                ? s.f('endsIn', {'t': fmtDuration(slot!.end.difference(now), s.lang)})
-                : s.f('startsIn', {'t': fmtDuration(slot!.start.difference(now), s.lang)})),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                isNow
+                    ? s.f('endsIn', {'t': fmtDuration(slot!.end.difference(now), s.lang)})
+                    : s.f('startsIn', {'t': fmtDuration(slot!.start.difference(now), s.lang)}),
+                textAlign: TextAlign.end,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ]),
           const SizedBox(height: 10),
           Text(slot!.item.displaySubject,

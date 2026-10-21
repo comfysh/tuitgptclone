@@ -346,7 +346,7 @@ class Assignment {
   String get title => (name == null || name!.trim().isEmpty) ? (taskType ?? '—') : name!;
 
   /// Stable identity used to detect changes between syncs.
-  String get key => '$courseId|${uploadId ?? ''}|${taskType ?? ''}|${name ?? ''}';
+  String get key => '$courseId|${taskType ?? ''}|${teacher ?? ''}|${name ?? ''}|${taskFile?.url ?? ''}';
 
   bool get isGraded => grade != null && grade! > 0;
   bool get isSubmitted => uploadedFile != null;

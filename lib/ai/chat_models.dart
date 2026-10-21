@@ -111,6 +111,14 @@ class Conversation {
 }
 
 class ChatStore {
+  static const maxChats = 100;
+
+  static Future<void> deleteAttachment(ChatAttachment a) async {
+    try {
+      await File(a.path).delete();
+    } catch (_) {}
+  }
+
   static Future<List<Conversation>> load() async {
     final storage = await AppStorage.instance();
     final j = await storage.readJson(storage.chatsFile);
@@ -118,12 +126,36 @@ class ChatStore {
         .map((e) => Conversation.fromJson(Map<String, dynamic>.from(e)))
         .toList();
     list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    // Version 1.0.0 could save a chat twice; keep the newest copy.
+    final seen = <String>{};
+    list.retainWhere((c) => seen.add(c.id));
     return list;
   }
 
   static Future<void> save(List<Conversation> chats) async {
     final storage = await AppStorage.instance();
-    await storage.writeJson(storage.chatsFile, {'chats': chats.take(100).map((e) => e.toJson()).toList()});
+    await storage.writeJson(storage.chatsFile, {'chats': chats.take(maxChats).map((e) => e.toJson()).toList()});
+  }
+
+  /// Deletes files in chat_files/ that no saved message uses (left behind
+  /// when the app was closed with unsent attachments). Recent files are kept
+  /// in case they are being attached right now.
+  static Future<void> sweepOrphans(List<Conversation> chats) async {
+    final storage = await AppStorage.instance();
+    final dir = storage.chatFilesDir;
+    if (!await dir.exists()) return;
+    final used = {
+      for (final c in chats)
+        for (final m in c.messages)
+          for (final a in m.attachments) a.path,
+    };
+    final cutoff = DateTime.now().subtract(const Duration(minutes: 10));
+    await for (final e in dir.list()) {
+      if (e is! File || used.contains(e.path)) continue;
+      try {
+        if ((await e.lastModified()).isBefore(cutoff)) await e.delete();
+      } catch (_) {}
+    }
   }
 
   static Future<void> deleteFiles(Conversation c) async {

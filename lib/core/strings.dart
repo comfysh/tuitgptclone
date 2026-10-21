@@ -199,6 +199,7 @@ class S {
       'aboutBody':
           'TuitMate is a personal, unofficial companion for lms.tuit.uz. It reads the same pages you see after signing in and only writes to LMS when you upload an answer.',
       'testNotification': 'Send test notification',
+      'testNotificationBody': 'Notifications work!',
       'desktopNote': 'On PC, checks run while the app is open.',
       // AI
       'newChat': 'New chat',
@@ -399,6 +400,7 @@ class S {
       'aboutBody':
           "TuitMate — lms.tuit.uz uchun shaxsiy, norasmiy ilova. U siz kirgandan keyin ko'radigan sahifalarni o'qiydi va faqat javob yuklaganingizda LMS ga yozadi.",
       'testNotification': 'Sinov bildirishnomasi',
+      'testNotificationBody': 'Bildirishnomalar ishlayapti!',
       'desktopNote': 'Kompyuterda tekshiruvlar ilova ochiq bo‘lganda ishlaydi.',
       'newChat': 'Yangi suhbat',
       'chats': 'Suhbatlar',
@@ -598,6 +600,7 @@ class S {
       'aboutBody':
           'TuitMate — личное неофициальное приложение для lms.tuit.uz. Оно читает те же страницы, что вы видите после входа, и пишет в LMS только когда вы загружаете ответ.',
       'testNotification': 'Тестовое уведомление',
+      'testNotificationBody': 'Уведомления работают!',
       'desktopNote': 'На ПК проверки выполняются, пока приложение открыто.',
       'newChat': 'Новый чат',
       'chats': 'Чаты',

@@ -59,7 +59,7 @@ class WelcomeScreen extends StatelessWidget {
               const SizedBox(height: 28),
               FilledButton.icon(
                 style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                onPressed: () => LmsWebPage.login(context),
+                onPressed: app.wiping ? null : () => LmsWebPage.login(context),
                 icon: const Icon(Icons.login),
                 label: Text(s['signIn']),
               ),

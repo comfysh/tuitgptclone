@@ -38,7 +38,9 @@ class _DeadlinesScreenState extends State<DeadlinesScreen> {
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final s = S.of(context);
-    final all = app.snapshot.assignments.where((a) => _course == null || a.courseId == _course).toList();
+    // Forget a course filter that no longer exists (e.g. after changing semester).
+    final course = app.snapshot.courses.any((c) => c.id == _course) ? _course : null;
+    final all = app.snapshot.assignments.where((a) => course == null || a.courseId == course).toList();
     final shown = all.where((a) => _match(a, _filter)).toList().sortedByDeadline();
     if (_filter == _Filter.graded || _filter == _Filter.all) {
       // Most recent first for finished work.
@@ -73,7 +75,7 @@ class _DeadlinesScreenState extends State<DeadlinesScreen> {
         const SizedBox(height: 8),
         if (app.snapshot.courses.length > 1)
           DropdownButton<int?>(
-            value: _course,
+            value: course,
             isExpanded: true,
             hint: Text(s['courses']),
             items: [
@@ -160,11 +162,36 @@ class _AssignmentSheet extends StatefulWidget {
 class _AssignmentSheetState extends State<_AssignmentSheet> {
   bool _busy = false;
 
+  // Messages are shown inside the sheet: a SnackBar would appear behind it.
+  String? _status;
+  bool _statusBusy = false;
+  bool _statusError = false;
+
+  /// The task file couldn't be downloaded; the next "Ask AI" goes without it.
+  bool _fileFailed = false;
+
+  void _setStatus(String? message, {bool busy = false, bool error = false}) {
+    if (!mounted) return;
+    setState(() {
+      _status = message;
+      _statusBusy = busy;
+      _statusError = error;
+    });
+  }
+
   Assignment get a {
-    // Pick up the refreshed copy after an upload.
+    // Pick up the refreshed copy after an upload. Rows can share a key, so
+    // never swap in another row (its upload id would receive the file).
     final app = context.read<AppState>();
-    for (final x in app.snapshot.coursePages[widget.a.courseId]?.assignments ?? const <Assignment>[]) {
-      if (x.key == widget.a.key) return x;
+    final same = [
+      for (final x in app.snapshot.coursePages[widget.a.courseId]?.assignments ?? const <Assignment>[])
+        if (x.key == widget.a.key) x,
+    ];
+    if (same.length == 1) return same.single;
+    if (widget.a.uploadId != null) {
+      for (final x in same) {
+        if (x.uploadId == widget.a.uploadId) return x;
+      }
     }
     return widget.a;
   }
@@ -173,11 +200,20 @@ class _AssignmentSheetState extends State<_AssignmentSheet> {
     final s = S.read(context);
     final app = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
+    // If the sheet was closed meanwhile, report the result as a SnackBar.
+    void report(String m, {bool error = false}) {
+      if (mounted) {
+        _setStatus(m, error: error);
+      } else {
+        messenger.showSnackBar(SnackBar(content: Text(m)));
+      }
+    }
+
     final f = await FilePicker.pickFile(dialogTitle: s['uploadAnswer']);
     if (f == null) return;
     final size = await f.length() ?? 0;
     if (size > 50 * 1024 * 1024) {
-      messenger.showSnackBar(SnackBar(content: Text(s['uploadTooBig'])));
+      _setStatus(s['uploadTooBig'], error: true);
       return;
     }
     if (!mounted) return;
@@ -192,13 +228,15 @@ class _AssignmentSheetState extends State<_AssignmentSheet> {
       ),
     );
     if (ok != true) return;
+    final task = a;
     setState(() => _busy = true);
+    _setStatus(s['uploading'], busy: true);
     try {
       final bytes = await f.readAsBytes();
-      await app.upload(a, f.name, bytes);
-      messenger.showSnackBar(SnackBar(content: Text(s['uploadOk'])));
+      await app.upload(task, f.name, bytes);
+      report('✓ ${s['uploadOk']}');
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('${s['error']}: $e')));
+      report('${s['error']}: $e', error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -213,9 +251,13 @@ class _AssignmentSheetState extends State<_AssignmentSheet> {
         '${task.taskType != null ? ' · ${task.taskType}' : ''}'
         '${task.deadline != null ? '\n${s['deadline']}: ${fmtDateTime(task.deadline!, s.lang)}' : ''}';
     ChatLaunch launch = ChatLaunch(prompt);
-    if (task.taskFile != null && task.taskFile!.looksLikeFile) {
-      final got = await fetchForAi(context, task.taskFile!.url, task.taskFile!.name);
-      if (got != null) launch = ChatLaunch(prompt, fileName: got.$1, bytes: got.$2);
+    if (task.taskFile != null && task.taskFile!.looksLikeFile && !_fileFailed) {
+      final got = await fetchForAi(context, task.taskFile!.url, task.taskFile!.name, onStatus: _setStatus);
+      if (got == null) {
+        _fileFailed = true; // keep the sheet open so the error stays visible; next tap asks without the file
+        return;
+      }
+      launch = ChatLaunch(prompt, fileName: got.$1, bytes: got.$2);
     }
     navigator.popUntil((r) => r.isFirst);
     nav.go(Dest.assistant, payload: launch);
@@ -262,7 +304,7 @@ class _AssignmentSheetState extends State<_AssignmentSheet> {
               title: Text(s['taskFile']),
               subtitle: Text(a.taskFile!.name),
               trailing: const Icon(Icons.download),
-              onTap: () => downloadAndOpen(context, a.taskFile!.url, a.taskFile!.name),
+              onTap: () => downloadAndOpen(context, a.taskFile!.url, a.taskFile!.name, onStatus: _setStatus),
             ),
           if (a.uploadedFile != null)
             ListTile(
@@ -271,7 +313,7 @@ class _AssignmentSheetState extends State<_AssignmentSheet> {
               title: Text(s['yourAnswer']),
               subtitle: Text(a.uploadedFile!.name),
               trailing: const Icon(Icons.download),
-              onTap: () => downloadAndOpen(context, a.uploadedFile!.url, a.uploadedFile!.name),
+              onTap: () => downloadAndOpen(context, a.uploadedFile!.url, a.uploadedFile!.name, onStatus: _setStatus),
             ),
           const SizedBox(height: 12),
           Wrap(spacing: 10, runSpacing: 10, children: [
@@ -292,6 +334,21 @@ class _AssignmentSheetState extends State<_AssignmentSheet> {
               label: Text(s['openInLms']),
             ),
           ]),
+          if (_status != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                if (_statusBusy)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 10, top: 2),
+                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+                Expanded(
+                  child: SelectableText(_status!,
+                      style: TextStyle(color: _statusError ? cs.error : cs.onSurfaceVariant)),
+                ),
+              ]),
+            ),
         ]),
       ),
     );

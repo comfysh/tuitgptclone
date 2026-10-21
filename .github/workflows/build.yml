@@ -44,6 +44,29 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      # Same signing key on every build, so a new APK installs over the old one.
+      # Add the repository secret ANDROID_KEYSTORE_BASE64 (see README). The other
+      # three secrets are optional and default to the values shown.
+      - name: Restore signing key
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KS_B64" ]; then
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set; the APK is signed with a temporary key and won't update an installed copy."
+            exit 0
+          fi
+          echo "$KS_B64" | base64 -d > android/app/upload.jks
+          P="${KS_PASS:-android}"; A="${KEY_ALIAS:-androiddebugkey}"; KP="${KEY_PASS:-$P}"
+          # java.util.Properties treats backslashes as escapes
+          {
+            echo "storeFile=upload.jks"
+            echo "storePassword=${P//\\/\\\\}"
+            echo "keyAlias=${A//\\/\\\\}"
+            echo "keyPassword=${KP//\\/\\\\}"
+          } > android/key.properties
       - run: flutter build apk --release
       - run: cp build/app/outputs/flutter-apk/app-release.apk TuitMate.apk
       - uses: actions/upload-artifact@v4
@@ -74,9 +97,12 @@ jobs:
         shell: pwsh
         continue-on-error: true
         run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
-          & $iscc "/O$($PWD.Path)" windows/installer.iss
+          function Find-Iscc {
+            Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe", "$env:ProgramFiles\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          $iscc = Find-Iscc
+          if (-not $iscc) { choco install innosetup -y --no-progress; $iscc = Find-Iscc }
+          & $iscc.FullName "/O$($PWD.Path)" windows/installer.iss
       - uses: actions/upload-artifact@v4
         with:
           name: TuitMate-windows

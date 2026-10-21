@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
@@ -53,10 +54,23 @@ class AppStorage {
     }
   }
 
-  Future<void> saveSnapshot(LmsSnapshot s) async {
-    final tmp = File('${snapshotFile.path}.tmp');
-    await tmp.writeAsString(jsonEncode(s.toJson()));
-    await tmp.rename(snapshotFile.path);
+  Future<void> saveSnapshot(LmsSnapshot s) => _atomicWrite(snapshotFile, jsonEncode(s.toJson()));
+
+  static final _rand = Random();
+
+  /// Writes via a temp file unique to this write: the UI and the Android
+  /// background worker (another isolate) may save at the same moment.
+  Future<void> _atomicWrite(File f, String data) async {
+    final tmp = File('${f.path}.${DateTime.now().microsecondsSinceEpoch}-${_rand.nextInt(1 << 30)}.tmp');
+    try {
+      await tmp.writeAsString(data, flush: true);
+      await tmp.rename(f.path);
+    } catch (_) {
+      try {
+        await tmp.delete();
+      } catch (_) {}
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> readJson(File f) async {
@@ -68,18 +82,30 @@ class AppStorage {
     }
   }
 
-  Future<void> writeJson(File f, Object data) async {
-    final tmp = File('${f.path}.tmp');
-    await tmp.writeAsString(jsonEncode(data));
-    await tmp.rename(f.path);
-  }
+  Future<void> writeJson(File f, Object data) => _atomicWrite(f, jsonEncode(data));
 
+  /// Removes everything tied to the signed-in account.
   Future<void> clearAll() async {
-    for (final f in [snapshotFile, notifyStateFile]) {
-      if (await f.exists()) await f.delete();
+    for (final f in [snapshotFile, notifyStateFile, chatsFile]) {
+      try {
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
     }
-    final cookies = Directory(cookieDir);
-    if (await cookies.exists()) await cookies.delete(recursive: true);
+    for (final d in [Directory(cookieDir), chatFilesDir]) {
+      try {
+        if (await d.exists()) await d.delete(recursive: true);
+      } catch (_) {}
+    }
+    // Temp files left by an interrupted write.
+    try {
+      await for (final e in root.list()) {
+        if (e is File && e.path.endsWith('.tmp')) {
+          try {
+            await e.delete();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
   }
 }
 
@@ -113,5 +139,11 @@ class Secrets {
   static Future<void> deleteLms() async {
     await write(lmsLogin, null);
     await write(lmsPassword, null);
+  }
+
+  static Future<void> deleteAll() async {
+    await deleteLms();
+    await write(geminiKey, null);
+    await write(openaiKey, null);
   }
 }

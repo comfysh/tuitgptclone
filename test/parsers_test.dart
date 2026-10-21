@@ -4,6 +4,9 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tuitmate/ai/file_text.dart';
+import 'package:tuitmate/core/timetable.dart';
+import 'package:tuitmate/lms/lms_client.dart';
+import 'package:tuitmate/ui/files.dart';
 import 'package:tuitmate/lms/changes.dart';
 import 'package:tuitmate/lms/models.dart';
 import 'package:tuitmate/lms/parsers.dart';
@@ -160,5 +163,91 @@ void main() {
     final arc = Archive()..addFile(ArchiveFile.string('word/document.xml', xml));
     final bytes = Uint8List.fromList(ZipEncoder().encode(arc));
     expect(extractText('a.docx', 'application/octet-stream', bytes), 'Hello\nWorld & you');
+  });
+
+  test('WebView cookie expiry: seconds (Windows) and milliseconds (Android)', () {
+    final secs = makeCookie('tuitlms_session', 'abc', expires: 1893456000); // 2030-01-01
+    final ms = makeCookie('tuitlms_session', 'abc', expires: 1893456000000);
+    expect(secs.expires!.toUtc().year, 2030);
+    expect(secs.expires, ms.expires);
+    expect(makeCookie('x', 'y', expires: -1).expires, isNull); // session cookie
+  });
+
+  test('file names from URLs and Content-Disposition', () {
+    expect(LmsClient.fileNameFromUrl('https://lms.tuit.uz/storage/Lab%20100%25.docx'), 'Lab 100%.docx');
+    expect(LmsClient.fileNameFromUrl('https://lms.tuit.uz/storage/Ma%27ruza%201.pptx'), "Ma'ruza 1.pptx");
+    expect(fileNameFromDisposition('attachment; filename="Lab 1.docx"'), 'Lab 1.docx');
+    expect(fileNameFromDisposition("attachment; filename*=UTF-8''%D0%9B%D0%B5%D0%BA.pdf"), 'Лек.pdf');
+    expect(fileNameFromDisposition('Lab 1.docx'), isNull);
+  });
+
+  test('assignment identity ignores upload state; duplicates are not guessed', () {
+    Assignment a(String name, {int? up, double? grade}) =>
+        Assignment(courseId: 1, courseName: 'Math', taskType: 'Amaliy', name: name, uploadId: up, grade: grade, maxGrade: 10);
+    expect(a('HW1', up: 5).key, a('HW1').key);
+    final c = const Course(id: 1, subject: 'Math', subjectId: 1);
+    final old = LmsSnapshot(semesterId: 1, courses: [c], coursePages: {1: CoursePage(const CourseRating(), [a('HW1', up: 5), a('Dup'), a('Dup')])}, updatedAt: DateTime(2026));
+    final now = LmsSnapshot(semesterId: 1, courses: [c], coursePages: {1: CoursePage(const CourseRating(), [a('HW1'), a('Dup', grade: 7), a('Dup')])}, updatedAt: DateTime(2026));
+    expect(diffSnapshots(old, now), isEmpty);
+  });
+
+  test('timetable entry links to the exactly matching course', () {
+    const courses = [
+      Course(id: 1, subject: 'Kvant fizikasi', subjectId: 1),
+      Course(id: 2, subject: 'Fizika', subjectId: 2),
+    ];
+    final item = ScheduleItem(start: DateTime(2026, 9, 7, 8, 30), title: 't', subject: 'Fizika');
+    expect(courseForItem(item, courses)!.id, 2);
+  });
+
+  test('xlsx extraction keeps numbers and rows', () {
+    const sharedXml = '<sst><si><t>Name</t></si><si><t>Score</t></si><si><t>Vali</t></si></sst>';
+    const sheetXml = '<worksheet><sheetData>'
+        '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>'
+        '<row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>87</v></c></row>'
+        '</sheetData></worksheet>';
+    final arc = Archive()
+      ..addFile(ArchiveFile.string('xl/sharedStrings.xml', sharedXml))
+      ..addFile(ArchiveFile.string('xl/worksheets/sheet1.xml', sheetXml));
+    final text = extractText('grades.xlsx', 'application/octet-stream', Uint8List.fromList(ZipEncoder().encode(arc)))!;
+    expect(text, contains('Name\tScore'));
+    expect(text, contains('Vali\t87'));
+  });
+
+  test('same-named tasks are told apart by upload id', () {
+    Assignment a(int up, {double? grade}) =>
+        Assignment(courseId: 1, courseName: 'Math', taskType: 'Amaliy', name: 'Amaliy ish', uploadId: up, grade: grade, maxGrade: 5);
+    final c = const Course(id: 1, subject: 'Math', subjectId: 1);
+    LmsSnapshot snap(List<Assignment> l) =>
+        LmsSnapshot(semesterId: 1, courses: [c], coursePages: {1: CoursePage(const CourseRating(), l)}, updatedAt: DateTime(2026));
+    final changes = diffSnapshots(snap([a(1), a(2)]), snap([a(1), a(2, grade: 4), a(3)]));
+    expect(changes.where((e) => e.kind == ChangeKind.gradePosted).length, 1);
+    expect(changes.where((e) => e.kind == ChangeKind.newAssignment).length, 1);
+  });
+
+  test('no absence alerts when the previous attendance fetch failed', () {
+    final old = LmsSnapshot(semesterId: 1, updatedAt: DateTime(2026), errors: {'attendance': 'timeout'});
+    final now = LmsSnapshot(semesterId: 1, updatedAt: DateTime(2026), absences: [Absence(subject: 'Fizika', date: DateTime(2026, 10, 1))]);
+    expect(diffSnapshots(old, now).where((e) => e.kind == ChangeKind.newAbsence), isEmpty);
+  });
+
+  test('same-named group with a closed row still announces a new task', () {
+    Assignment a(int? up) =>
+        Assignment(courseId: 1, courseName: 'Math', taskType: 'Amaliy', name: 'Amaliy ish', uploadId: up, maxGrade: 5);
+    final c = const Course(id: 1, subject: 'Math', subjectId: 1);
+    LmsSnapshot snap(List<Assignment> l) =>
+        LmsSnapshot(semesterId: 1, courses: [c], coursePages: {1: CoursePage(const CourseRating(), l)}, updatedAt: DateTime(2026));
+    final changes = diffSnapshots(snap([a(null), a(9002)]), snap([a(null), a(9002), a(9003)]));
+    expect(changes.where((e) => e.kind == ChangeKind.newAssignment).length, 1);
+  });
+
+  test('older news that was just outside a shorter list is not announced', () {
+    final old = LmsSnapshot(semesterId: 1, updatedAt: DateTime(2026), news: [NewsItem(title: 'B', date: DateTime(2026, 10, 10), url: 'b')]);
+    final now = LmsSnapshot(semesterId: 1, updatedAt: DateTime(2026), news: [
+      NewsItem(title: 'C', date: DateTime(2026, 10, 12), url: 'c'),
+      NewsItem(title: 'B', date: DateTime(2026, 10, 10), url: 'b'),
+      NewsItem(title: 'A', date: DateTime(2026, 9, 1), url: 'a'),
+    ]);
+    expect(diffSnapshots(old, now).where((e) => e.kind == ChangeKind.news).map((e) => e.subject), ['C']);
   });
 }

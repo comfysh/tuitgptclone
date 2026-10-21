@@ -42,7 +42,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _load(sweep: true);
   }
 
   @override
@@ -66,12 +66,16 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool sweep = false}) async {
     final ai = AiService(context.read<AppState>().settings);
     final chats = await ChatStore.load();
+    if (sweep) unawaited(ChatStore.sweepOrphans(chats));
     final key = await ai.apiKey();
     if (!mounted) return;
     setState(() {
+      // Keep the open (maybe streaming) conversation object instead of its disk copy.
+      final i = chats.indexWhere((c) => c.id == _chat.id);
+      if (i >= 0) chats[i] = _chat;
       _chats = chats;
       _hasKey = key != null && key.isNotEmpty;
     });
@@ -94,15 +98,32 @@ class _ChatScreenState extends State<ChatScreen> {
     _stop();
     setState(() {
       _chat = Conversation.create();
-      _pending.clear();
+      _discardPending();
     });
+  }
+
+  /// Deletes copies of attachments that were never sent.
+  void _discardPending() {
+    for (final a in _pending) {
+      ChatStore.deleteAttachment(a);
+    }
+    _pending.clear();
   }
 
   Future<void> _save() async {
     if (_chat.messages.isEmpty) return;
     _chat.updatedAt = DateTime.now();
-    if (!_chats.contains(_chat)) _chats.insert(0, _chat);
+    if (!_chats.any((c) => identical(c, _chat))) {
+      _chats.removeWhere((c) => c.id == _chat.id);
+      _chats.insert(0, _chat);
+    }
     _chats.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    if (_chats.length > ChatStore.maxChats) {
+      for (final c in _chats.sublist(ChatStore.maxChats)) {
+        ChatStore.deleteFiles(c);
+      }
+      _chats.removeRange(ChatStore.maxChats, _chats.length);
+    }
     await ChatStore.save(_chats);
   }
 
@@ -168,6 +189,9 @@ class _ChatScreenState extends State<ChatScreen> {
       },
       onError: (Object e) {
         reply.error = true;
+        // A request the API rejected (bad file, too large, blocked) is not resent;
+        // after a temporary error (429, 503, timeout) "try again" still has the question.
+        if (e is AiException && e.badRequest) user.error = true;
         reply.text = e is AiException && e.message == 'NO_KEY'
             ? s['aiNoKey']
             : (e is DioException && CancelToken.isCancel(e) ? reply.text : '${s['error']}: $e');
@@ -225,7 +249,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _stop();
     setState(() {
       _chat = c;
-      _pending.clear();
+      _discardPending();
     });
     _scrollDown();
   }
@@ -307,7 +331,10 @@ class _ChatScreenState extends State<ChatScreen> {
               InputChip(
                 avatar: Icon(a.isImage ? Icons.image_outlined : Icons.insert_drive_file_outlined, size: 18),
                 label: Text(a.name, overflow: TextOverflow.ellipsis),
-                onDeleted: () => setState(() => _pending.remove(a)),
+                onDeleted: () {
+                  setState(() => _pending.remove(a));
+                  ChatStore.deleteAttachment(a);
+                },
               ),
           ]),
         ),

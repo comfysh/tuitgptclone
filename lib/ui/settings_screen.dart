@@ -110,7 +110,11 @@ class ProfileScreen extends StatelessWidget {
                     for (final sem in app.snapshot.semesters)
                       DropdownMenuItem(value: sem.id, child: Text(sem.name, overflow: TextOverflow.ellipsis)),
                   ],
-                  onChanged: (v) => app.changeSemester(v),
+                  onChanged: (v) {
+                    // Picking the LMS's current semester means "follow the LMS", not "pin this one".
+                    final current = app.snapshot.semesters.where((x) => x.selected).map((x) => x.id).firstOrNull;
+                    app.changeSemester(v == current ? null : v);
+                  },
                 ),
               ),
           ]),
@@ -128,6 +132,7 @@ class ProfileScreen extends StatelessWidget {
                 app.touch();
                 if (v) await Notifier.requestPermission();
                 await app.configureBackground();
+                await Notifier.scheduleClassReminders(app.snapshot, st); // cancels them when off
               },
             ),
             ListTile(
@@ -170,7 +175,7 @@ class ProfileScreen extends StatelessWidget {
               title: Text(s['testNotification']),
               onTap: () async {
                 await Notifier.requestPermission();
-                await Notifier.show('test', 'TuitMate', s['uploadOk']);
+                await Notifier.show('test', 'TuitMate', s['testNotificationBody']);
               },
             ),
           ]),

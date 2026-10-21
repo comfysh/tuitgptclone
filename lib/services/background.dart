@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/widgets.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../core/settings.dart';
@@ -18,6 +19,8 @@ void callbackDispatcher() {
   Workmanager().executeTask((task, input) async {
     WidgetsFlutterBinding.ensureInitialized();
     try {
+      // This isolate is separate from the UI one, so date formats load again here.
+      await initializeDateFormatting();
       await runLmsCheck();
     } catch (_) {}
     return true;
@@ -44,6 +47,12 @@ Future<void> runLmsCheck() async {
 }
 
 class Background {
+  static Future<void> cancel() async {
+    if (!Platform.isAndroid) return;
+    await Workmanager().initialize(callbackDispatcher);
+    await Workmanager().cancelByUniqueName(_taskName);
+  }
+
   static Future<void> configure(Settings settings) async {
     if (!Platform.isAndroid) return;
     await Workmanager().initialize(callbackDispatcher);

@@ -137,15 +137,23 @@ Future<LmsSnapshot> fetchSnapshot(
     throw LmsException(errors['semesters'] ?? 'Could not find your current semester on the LMS.');
   }
   final sid = semId;
+  // Semester data only falls back to the previous copy of the same semester.
+  final base = prev.semesterId == sid ? prev : LmsSnapshot();
 
   final results = await Future.wait<dynamic>([
     full || prev.info == null ? section('info', c.info, prev.info) : Future.value(prev.info),
-    section('courses', () => c.courses(sid), prev.courses),
-    section('schedule', () => c.schedule(sid), prev.schedule),
-    section('attendance', () => c.absences(sid), prev.absences),
-    section('exams', () => c.finals(sid), prev.finals),
+    section('courses', () => c.courses(sid), base.courses),
+    section('schedule', () => c.schedule(sid), base.schedule),
+    section('attendance', () => c.absences(sid), base.absences),
+    section('exams', () => c.finals(sid), base.finals),
     full ? section('studyPlan', c.studyPlan, prev.studyPlan) : Future.value(prev.studyPlan),
-    section('news', () => c.news(limit: full ? 9 : 3), prev.news),
+    section('news', () async {
+      final fresh = await c.news(limit: full ? 9 : 3);
+      final seen = {for (final n in fresh) n.key};
+      // Keep older items so a light sync never shrinks the list (that would
+      // make the next full sync announce old posts as new).
+      return [...fresh, ...prev.news.where((n) => !seen.contains(n.key))].take(12).toList();
+    }, prev.news),
   ]);
 
   final courses = results[1] as List<Course>;
@@ -155,16 +163,16 @@ Future<LmsSnapshot> fetchSnapshot(
   final tasks = <Future<void> Function()>[];
   for (final course in courses) {
     tasks.add(() async {
-      final p = await section('course:${course.id}', () => c.coursePage(course), prev.coursePages[course.id]);
+      final p = await section('course:${course.id}', () => c.coursePage(course), base.coursePages[course.id]);
       if (p != null) pages[course.id] = p;
     });
     if (full) {
       tasks.add(() async {
-        final l = await section('lessons:${course.id}', () => c.lessons(course.id), prev.lessons[course.id]);
+        final l = await section('lessons:${course.id}', () => c.lessons(course.id), base.lessons[course.id]);
         if (l != null) lessons[course.id] = l;
       });
-    } else if (prev.lessons[course.id] != null) {
-      lessons[course.id] = prev.lessons[course.id]!;
+    } else if (base.lessons[course.id] != null) {
+      lessons[course.id] = base.lessons[course.id]!;
     }
   }
   await _pool(tasks, 4);

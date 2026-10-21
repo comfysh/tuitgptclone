@@ -20,21 +20,63 @@ List<LmsChange> diffSnapshots(LmsSnapshot old, LmsSnapshot now) {
   if (old.isEmpty || old.semesterId != now.semesterId) return const [];
   final out = <LmsChange>[];
 
+  // Assignments are matched by their stable key. Several rows can share a key
+  // (same type, teacher and name); inside such a group the upload id tells
+  // them apart, and if that doesn't work we don't guess.
+  final oldCount = <String, int>{}, nowCount = <String, int>{};
+  for (final a in old.assignments) {
+    oldCount[a.key] = (oldCount[a.key] ?? 0) + 1;
+  }
+  for (final a in now.assignments) {
+    nowCount[a.key] = (nowCount[a.key] ?? 0) + 1;
+  }
+  String withId(Assignment a) => '${a.key}|${a.uploadId}';
+  final oldByKey = {for (final a in old.assignments) a.key: a};
+  final oldById = {for (final a in old.assignments) if (a.uploadId != null) withId(a): a};
+  // Groups where every old row had an upload id: an unseen id there is a new task.
+  final oldAllHaveIds = <String, bool>{};
+  for (final a in old.assignments) {
+    oldAllHaveIds[a.key] = (oldAllHaveIds[a.key] ?? true) && a.uploadId != null;
+  }
+  // Rows with an upload id that wasn't there before, per group.
+  final unseen = <String, int>{};
+  for (final a in now.assignments) {
+    if (a.uploadId != null && !oldById.containsKey(withId(a))) unseen[a.key] = (unseen[a.key] ?? 0) + 1;
+  }
+  // Closed rows (no upload id) can still be matched by your uploaded file.
+  String withFile(Assignment a) => '${a.key}|${a.uploadedFile?.url}';
+  final oldByFile = {for (final o in old.assignments) if (o.uploadedFile != null) withFile(o): o};
+
   // Only compare courses that were fetched successfully both times.
-  final oldA = {for (final a in old.assignments) a.key: a};
   for (final courseId in now.coursePages.keys) {
     if (!old.coursePages.containsKey(courseId)) continue;
     for (final a in now.coursePages[courseId]!.assignments) {
-      final before = oldA[a.key];
+      final dup = (oldCount[a.key] ?? 0) > 1 || (nowCount[a.key] ?? 0) > 1;
+      final id = dup ? withId(a) : a.key;
+      Assignment? before;
+      if (!dup) {
+        before = oldByKey[a.key];
+      } else if (a.uploadId != null && oldById.containsKey(withId(a))) {
+        before = oldById[withId(a)];
+      } else if (a.uploadedFile != null && oldByFile.containsKey(withFile(a))) {
+        before = oldByFile[withFile(a)];
+      } else if ((oldCount[a.key] ?? 0) == 0 ||
+          (a.uploadId != null &&
+              (oldAllHaveIds[a.key] == true ||
+                  (unseen[a.key] ?? 0) <= (nowCount[a.key] ?? 0) - (oldCount[a.key] ?? 0)))) {
+        before = null; // new task: the whole group, or no more unseen ids than added rows
+      } else {
+        continue;
+      }
       if (before == null) {
-        out.add(LmsChange(ChangeKind.newAssignment, a.key, a.courseName, a.title, when: a.deadline));
+        out.add(LmsChange(ChangeKind.newAssignment, id, a.courseName, a.title, when: a.deadline));
         continue;
       }
       if (a.deadline != null && before.deadline != null && a.deadline != before.deadline) {
-        out.add(LmsChange(ChangeKind.deadlineChanged, a.key, a.courseName, a.title, when: a.deadline));
+        out.add(LmsChange(ChangeKind.deadlineChanged, id, a.courseName, a.title, when: a.deadline));
       }
       if (a.isGraded && (before.grade ?? 0) != a.grade) {
-        out.add(LmsChange(ChangeKind.gradePosted, a.key, a.courseName, a.title, value: a.grade, max: a.maxGrade));
+        out.add(LmsChange(ChangeKind.gradePosted, id, a.courseName, a.title, value: a.grade, max: a.maxGrade));
       }
     }
   }
@@ -58,7 +100,9 @@ List<LmsChange> diffSnapshots(LmsSnapshot old, LmsSnapshot now) {
     }
   }
 
-  if (old.absences.isNotEmpty || now.absences.length <= 3) {
+  // An empty old list from a failed fetch says nothing about what is new.
+  final oldAbsUnknown = old.absences.isEmpty && old.errors.containsKey('attendance');
+  if (!oldAbsUnknown && (old.absences.isNotEmpty || now.absences.length <= 3)) {
     final oldAbs = old.absences.map((a) => a.key).toSet();
     for (final a in now.absences) {
       if (!oldAbs.contains(a.key)) {
@@ -69,8 +113,15 @@ List<LmsChange> diffSnapshots(LmsSnapshot old, LmsSnapshot now) {
 
   if (old.news.isNotEmpty) {
     final oldN = old.news.map((n) => n.key).toSet();
+    DateTime? oldest;
+    for (final n in old.news) {
+      if (n.date != null && (oldest == null || n.date!.isBefore(oldest))) oldest = n.date;
+    }
     for (final n in now.news) {
-      if (!oldN.contains(n.key)) out.add(LmsChange(ChangeKind.news, n.key, n.title, n.body ?? '', when: n.date));
+      if (oldN.contains(n.key)) continue;
+      // Older than everything we had: it was just outside a shorter list.
+      if (oldest != null && n.date != null && n.date!.isBefore(oldest)) continue;
+      out.add(LmsChange(ChangeKind.news, n.key, n.title, n.body ?? '', when: n.date));
     }
   }
   return out;
@@ -90,8 +141,11 @@ List<LmsChange> dueReminders(LmsSnapshot s, Set<String> sent, DateTime now) {
             ? 24
             : null;
     if (h == null) continue;
-    final key = 'rem$h|${a.key}|${a.deadline!.toIso8601String()}';
-    if (!sent.contains(key)) {
+    final iso = a.deadline!.toIso8601String();
+    final key = 'rem$h|${a.key}|${a.uploadId}|$iso';
+    // Format used by version 1.0.0, so reminders already sent aren't repeated.
+    final legacy = 'rem$h|${a.courseId}|${a.uploadId}|${a.taskType ?? ''}|${a.name ?? ''}|$iso';
+    if (!sent.contains(key) && !sent.contains(legacy)) {
       out.add(LmsChange(ChangeKind.reminder, key, a.courseName, a.title, when: a.deadline, value: h.toDouble()));
     }
   }
