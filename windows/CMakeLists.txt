@@ -53,6 +53,11 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 add_subdirectory("runner")
 
 
+# Visual Studio 2026 (MSVC 14.5x) turns the deprecated <experimental/coroutine>
+# header into a hard error. flutter_inappwebview_windows still uses it through
+# C++/WinRT in C++17 mode, so opt back in until the plugin moves to C++20.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)

@@ -76,7 +76,7 @@ jobs:
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
-          & $iscc /O"." windows/installer.iss
+          & $iscc "/O$($PWD.Path)" windows/installer.iss
       - uses: actions/upload-artifact@v4
         with:
           name: TuitMate-windows
