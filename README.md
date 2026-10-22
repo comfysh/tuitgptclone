@@ -87,13 +87,13 @@ uninstalled (losing its data) before a build with a new key can be installed.
 
 No key file yet? Make one (`keytool` comes with any JDK or Android Studio):
 
-```bash
-keytool -genkeypair -keystore upload.jks -storetype PKCS12 -alias androiddebugkey -keyalg RSA -keysize 2048 \
-  -validity 10000 -storepass android -dname "CN=TuitMate"
-base64 -w0 upload.jks > ANDROID_KEYSTORE_BASE64.txt          # Linux / macOS
+```
+keytool -genkeypair -keystore upload.jks -storetype PKCS12 -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -dname "CN=TuitMate"
 ```
 
-On Windows (PowerShell): `[Convert]::ToBase64String([IO.File]::ReadAllBytes("upload.jks")) | Set-Content -NoNewline ANDROID_KEYSTORE_BASE64.txt`
+Then turn it into one line of text:
+- Linux / macOS: `base64 -w0 upload.jks > ANDROID_KEYSTORE_BASE64.txt`
+- Windows (PowerShell): `[Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path upload.jks).Path)) | Set-Content -NoNewline ANDROID_KEYSTORE_BASE64.txt`
 
 ### Option B: Build on your PC
 1. Install [Flutter](https://docs.flutter.dev/get-started/install) (3.47 or newer). For Windows builds, also install Visual Studio 2022 or 2026 with *Desktop development with C++*.

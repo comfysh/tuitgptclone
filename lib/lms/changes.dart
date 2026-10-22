@@ -52,7 +52,8 @@ List<LmsChange> diffSnapshots(LmsSnapshot old, LmsSnapshot now) {
     if (!old.coursePages.containsKey(courseId)) continue;
     for (final a in now.coursePages[courseId]!.assignments) {
       final dup = (oldCount[a.key] ?? 0) > 1 || (nowCount[a.key] ?? 0) > 1;
-      final id = dup ? withId(a) : a.key;
+      // Notification identity: closed rows (no upload id) use their uploaded file.
+      final id = !dup ? a.key : (a.uploadId != null ? withId(a) : withFile(a));
       Assignment? before;
       if (!dup) {
         before = oldByKey[a.key];

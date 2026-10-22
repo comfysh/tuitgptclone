@@ -176,7 +176,11 @@ class AiService {
     if ((r.statusCode ?? 0) >= 400) {
       final text = await lines.join('\n');
       final code = r.statusCode ?? 0;
-      throw AiException(_errorText(r.statusCode, text), badRequest: code == 400 || code == 413 || code == 422);
+      // Gemini answers a wrong key with 400 too; that turn works once the key is fixed.
+      final keyProblem =
+          text.contains('API_KEY_INVALID') || text.contains('API key not valid') || text.contains('API key expired');
+      throw AiException(_errorText(r.statusCode, text),
+          badRequest: (code == 400 && !keyProblem) || code == 413 || code == 422);
     }
     await for (final line in lines) {
       if (!line.startsWith('data:')) continue;
