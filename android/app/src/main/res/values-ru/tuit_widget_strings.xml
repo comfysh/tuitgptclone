@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tuit_widget_label">TuitMate · Сегодня</string>
+    <string name="tuit_widget_description">Текущая или следующая пара, задания и часы НБ — с одного взгляда.</string>
+
+    <string name="tuit_widget_preview_date">Сегодня</string>
+    <string name="tuit_widget_preview_badge">Сейчас · 10:00–11:20</string>
+    <string name="tuit_widget_preview_title">Операционные системы</string>
+    <string name="tuit_widget_preview_subtitle">B-204 · Лекция</string>
+    <string name="tuit_widget_preview_due_title">Лабораторная 3 · Компьютерные сети</string>
+    <string name="tuit_widget_preview_due_when">завтра, 23:59</string>
+    <string name="tuit_widget_preview_classes_label">пар сегодня</string>
+    <string name="tuit_widget_preview_tasks_label">задания</string>
+    <string name="tuit_widget_preview_nb_label">часов НБ</string>
+</resources>

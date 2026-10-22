@@ -10,6 +10,7 @@ import 'lms/lms_client.dart';
 import 'lms/models.dart';
 import 'lms/snapshot.dart';
 import 'services/background.dart';
+import 'services/home_widget_service.dart';
 import 'services/notifier.dart';
 import 'services/web_env.dart';
 
@@ -59,6 +60,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   void setLanguage(String v) {
     settings.language = v;
     notifyListeners();
+    // The home-screen widget shows its texts in the app language.
+    if (loggedIn && !snapshot.isEmpty) unawaited(HomeWidgetService.update(snapshot, settings));
   }
 
   void setThemeMode(ThemeMode v) {
@@ -157,6 +160,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       try {
         await Notifier.processChanges(base.isEmpty ? null : base, fresh, settings, storage);
       } catch (_) {}
+      if (loggedIn && client.epoch == epoch) unawaited(HomeWidgetService.update(fresh, settings));
     } on SessionExpiredException {
       if (loggedIn && client.epoch == epoch) sessionExpired = true;
     } catch (e) {
@@ -238,6 +242,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       try {
         await Background.cancel();
       } catch (_) {}
+      await HomeWidgetService.clear(); // nothing personal on the home screen
       await WebEnv.clearCookies();
       await storage.clearAll();
       await Secrets.deleteAll();
@@ -252,6 +257,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       try {
         await Notifier.cancelAll();
       } catch (_) {}
+      await HomeWidgetService.clear();
       await client.logout();
       await storage.clearAll();
     }

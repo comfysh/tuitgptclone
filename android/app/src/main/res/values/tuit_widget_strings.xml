@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home-screen widget "TuitMate · Today". The texts shown on the live widget come
+     from the app (lib/core/strings/widget.dart); these are the widget picker's
+     name, description and the sample content of its preview. -->
+<resources>
+    <string name="tuit_widget_label">TuitMate · Today</string>
+    <string name="tuit_widget_description">Your current or next class, open tasks and NB hours at a glance.</string>
+    <string name="tuit_widget_brand" translatable="false">TuitMate</string>
+
+    <!-- Preview sample (widget picker on Android 12+) -->
+    <string name="tuit_widget_preview_date">Today</string>
+    <string name="tuit_widget_preview_badge">Now · 10:00–11:20</string>
+    <string name="tuit_widget_preview_title">Operating systems</string>
+    <string name="tuit_widget_preview_subtitle">B-204 · Lecture</string>
+    <string name="tuit_widget_preview_due_title">Lab 3 · Computer networks</string>
+    <string name="tuit_widget_preview_due_when">tomorrow, 23:59</string>
+    <string name="tuit_widget_preview_classes_value" translatable="false">4</string>
+    <string name="tuit_widget_preview_classes_label">classes today</string>
+    <string name="tuit_widget_preview_tasks_value" translatable="false">3</string>
+    <string name="tuit_widget_preview_tasks_label">open tasks</string>
+    <string name="tuit_widget_preview_nb_value" translatable="false">12/74</string>
+    <string name="tuit_widget_preview_nb_label">NB hours</string>
+</resources>

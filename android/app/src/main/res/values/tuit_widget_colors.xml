@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home-screen widget "TuitMate · Today": brand gradient (Brand.hero in lib/ui/design.dart). -->
+<resources>
+    <color name="tuit_widget_start">#3C6EFF</color>
+    <color name="tuit_widget_end">#6D5BFF</color>
+    <color name="tuit_widget_text">#FFFFFFFF</color>
+    <color name="tuit_widget_text_soft">#D9FFFFFF</color>
+    <color name="tuit_widget_pill">#33FFFFFF</color>
+    <color name="tuit_widget_pill_now">#FFFFFFFF</color>
+    <color name="tuit_widget_now_text">#2848E0</color>
+    <color name="tuit_widget_panel">#24FFFFFF</color>
+    <color name="tuit_widget_divider">#38FFFFFF</color>
+</resources>

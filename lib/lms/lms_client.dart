@@ -223,7 +223,7 @@ class LmsClient {
       '/student/my-courses/upload',
       data: form,
       options: Options(headers: {
-        if (token != null) 'X-CSRF-TOKEN': token,
+        'X-CSRF-TOKEN': ?token,
         'X-Requested-With': 'XMLHttpRequest',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
         'Referer': '$lmsBase/student/my-courses/show/$courseId',
