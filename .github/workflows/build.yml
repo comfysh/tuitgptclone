@@ -83,7 +83,9 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk TuitMate.apk
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
           # Shown in the release notes; a missing tool must not block the release.
-          cert=$("$apksigner" verify --print-certs TuitMate.apk 2>/dev/null | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' || true)
+          out=$("$apksigner" verify --print-certs TuitMate.apk 2>&1 || true)
+          echo "$out" | head -n 8
+          cert=$(echo "$out" | sed -n 's/.*certificate SHA-256 digest: *//p' | head -n 1)
           echo "APK signing certificate SHA-256: $cert"
           printf 'cert_sha256=%s\nown_key=%s\n' "$cert" "${OWN_KEY:-false}" > signing.txt
       - uses: actions/upload-artifact@v7
