@@ -4,9 +4,50 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../core/format.dart';
 import '../core/strings.dart';
+import 'design.dart';
 import 'lms_web_page.dart';
 
-/// Standard page: app bar with refresh, sync/session banner, pull-to-refresh.
+export 'design.dart';
+
+/// Round icon button used in page headers.
+class HeaderButton extends StatelessWidget {
+  const HeaderButton({super.key, required this.icon, required this.tooltip, this.onPressed, this.busy = false});
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: Material(
+        color: cs.surface,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: busy ? null : onPressed,
+          child: Tooltip(
+            message: tooltip,
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: Center(
+                child: busy
+                    ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: cs.primary))
+                    : Icon(icon, size: 20, color: cs.onSurface),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Standard page: big title, refresh / open-in-LMS buttons, sync banner,
+/// pull-to-refresh and a centred column on wide screens.
 class PageScaffold extends StatelessWidget {
   const PageScaffold({
     super.key,
@@ -15,11 +56,13 @@ class PageScaffold extends StatelessWidget {
     this.actions = const [],
     this.lmsPath,
     this.bottom,
-    this.padding = const EdgeInsets.fromLTRB(16, 12, 16, 24),
+    this.padding = const EdgeInsets.fromLTRB(16, 8, 16, 28),
     this.fab,
+    this.subtitle,
   });
 
   final String title;
+  final String? subtitle;
   final List<Widget> children;
   final List<Widget> actions;
   final String? lmsPath;
@@ -33,27 +76,26 @@ class PageScaffold extends StatelessWidget {
     final s = S.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        toolbarHeight: subtitle == null ? 64 : 72,
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Text(title),
+          if (subtitle != null)
+            Text(subtitle!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500)),
+        ]),
         bottom: bottom,
         actions: [
           ...actions,
           if (lmsPath != null)
-            IconButton(
-              tooltip: s['openInLms'],
-              icon: const Icon(Icons.open_in_browser),
-              onPressed: () => LmsWebPage.open(context, lmsPath),
-            ),
-          IconButton(
+            HeaderButton(icon: Icons.open_in_new_rounded, tooltip: s['openInLms'], onPressed: () => LmsWebPage.open(context, lmsPath)),
+          HeaderButton(
+            icon: Icons.refresh_rounded,
             tooltip: s['refresh'],
-            icon: app.syncing
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2.4, color: Theme.of(context).appBarTheme.foregroundColor ?? Theme.of(context).colorScheme.onSurface))
-                : const Icon(Icons.refresh),
-            onPressed: app.syncing ? null : () => app.refresh(),
+            busy: app.syncing,
+            onPressed: () => app.refresh(),
           ),
+          const SizedBox(width: 6),
         ],
       ),
       floatingActionButton: fab,
@@ -62,7 +104,7 @@ class PageScaffold extends StatelessWidget {
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 980),
+            constraints: const BoxConstraints(maxWidth: 1080),
             child: ListView(
               padding: padding,
               physics: const AlwaysScrollableScrollPhysics(),
@@ -75,6 +117,7 @@ class PageScaffold extends StatelessWidget {
   }
 }
 
+/// Session/error banner, or skeleton cards while the very first sync runs.
 class SyncBanner extends StatelessWidget {
   const SyncBanner({super.key});
 
@@ -82,32 +125,42 @@ class SyncBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     final s = S.of(context);
-    final cs = Theme.of(context).colorScheme;
     if (app.sessionExpired) {
       return _Banner(
-        color: cs.errorContainer,
-        icon: Icons.lock_clock,
+        color: Brand.warning,
+        icon: Icons.lock_clock_rounded,
         text: s['sessionExpired'],
-        action: FilledButton.tonal(onPressed: () => LmsWebPage.login(context), child: Text(s['signInAgain'])),
+        action: FilledButton(onPressed: () => LmsWebPage.login(context), child: Text(s['signInAgain'])),
       );
     }
     if (app.lastError != null) {
       return _Banner(
-        color: cs.errorContainer,
-        icon: Icons.cloud_off,
+        color: Brand.danger,
+        icon: Icons.cloud_off_rounded,
         text: app.snapshot.isEmpty ? app.lastError! : s.f('savedData', {'time': fmtAgo(app.snapshot.updatedAt, s)}),
         action: TextButton(onPressed: () => app.refresh(), child: Text(s['retry'])),
       );
     }
     if (app.snapshot.isEmpty && app.syncing) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 48),
-        child: Column(children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 16),
-          Text(s['syncing']),
+      return Column(children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: Row(children: [
+            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.2)),
+            const SizedBox(width: 10),
+            Text(s['syncing'], style: const TextStyle(fontWeight: FontWeight.w600)),
+          ]),
+        ),
+        const Skeleton(height: 150),
+        const SizedBox(height: 12),
+        const Row(children: [
+          Expanded(child: Skeleton(height: 110)),
+          SizedBox(width: 12),
+          Expanded(child: Skeleton(height: 110)),
         ]),
-      );
+        const SizedBox(height: 12),
+        const Skeleton(height: 220),
+      ]);
     }
     return const SizedBox.shrink();
   }
@@ -123,24 +176,21 @@ class _Banner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: color,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
-          child: Row(children: [
-            Icon(icon, size: 20),
-            const SizedBox(width: 10),
-            Expanded(child: Text(text)),
-            if (action != null) action!,
-          ]),
-        ),
+      padding: const EdgeInsets.only(bottom: 14),
+      child: AppCard(
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+        child: Row(children: [
+          TintIcon(icon, color: color, size: 36),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w600))),
+          if (action != null) action!,
+        ]),
       ),
     );
   }
 }
 
+/// Section title (kept for existing screens; same look as [SectionHeader]).
 class SectionTitle extends StatelessWidget {
   const SectionTitle(this.text, {super.key, this.trailing});
   final String text;
@@ -149,11 +199,10 @@ class SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 18, 2, 8),
+      padding: const EdgeInsets.fromLTRB(4, 22, 4, 10),
       child: Row(children: [
         Expanded(
-          child: Text(text,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          child: Text(text, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         ),
         if (trailing != null) trailing!,
       ]),
@@ -167,17 +216,7 @@ class EmptyState extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
-      child: Column(children: [
-        Icon(icon, size: 44, color: cs.outline),
-        const SizedBox(height: 10),
-        Text(text, textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
-      ]),
-    );
-  }
+  Widget build(BuildContext context) => EmptyView(icon: icon, title: text);
 }
 
 class Pill extends StatelessWidget {
@@ -187,17 +226,7 @@ class Pill extends StatelessWidget {
   final IconData? icon;
 
   @override
-  Widget build(BuildContext context) {
-    final c = color ?? Theme.of(context).colorScheme.primary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (icon != null) ...[Icon(icon, size: 13, color: c), const SizedBox(width: 4)],
-        Text(text, style: TextStyle(color: c, fontSize: 12, fontWeight: FontWeight.w600)),
-      ]),
-    );
-  }
+  Widget build(BuildContext context) => Tag(text, color: color, icon: icon);
 }
 
 /// Big number in a coloured circle, e.g. a score.
@@ -213,9 +242,8 @@ class ScoreBadge extends StatelessWidget {
       width: size,
       height: size,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.14), shape: BoxShape.circle),
-      child: Text(text,
-          style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: size * 0.32)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(size * 0.32)),
+      child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: size * 0.32)),
     );
   }
 }
@@ -229,13 +257,14 @@ class InfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (value == null || value!.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         SizedBox(
           width: 140,
-          child: Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          child: Text(label,
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500)),
         ),
-        Expanded(child: SelectableText(value!)),
+        Expanded(child: SelectableText(value!, style: const TextStyle(fontWeight: FontWeight.w600))),
       ]),
     );
   }

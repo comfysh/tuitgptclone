@@ -23,6 +23,13 @@ const subjectPalette = [
 
 Color subjectColor(int subjectId) => subjectPalette[subjectId.abs() % subjectPalette.length];
 
+/// Colour of a course by its id (falls back to the name).
+Color courseColor(int courseId, LmsSnapshot snap, {String? name}) {
+  final c = snap.courseById(courseId);
+  if (c != null) return subjectColor(c.subjectId);
+  return name == null ? subjectPalette.first : colorForCourseName(name, snap);
+}
+
 /// Course for a name shown elsewhere (timetable subject, assignment course name).
 Color colorForCourseName(String name, LmsSnapshot snap) {
   final n = name.trim().toLowerCase();

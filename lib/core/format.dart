@@ -2,33 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../lms/models.dart';
+import '../ui/design.dart';
 import 'strings.dart';
 
-/// LMS-like blue used on lms.tuit.uz.
-const lmsBlue = Color(0xFF2F73C8);
+/// Main brand blue (kept under the old name for existing call sites).
+const lmsBlue = Brand.primary;
 
-ThemeData buildTheme(Brightness b) {
-  final scheme = ColorScheme.fromSeed(seedColor: lmsBlue, brightness: b);
-  return ThemeData(
-    colorScheme: scheme,
-    useMaterial3: true,
-    scaffoldBackgroundColor: b == Brightness.light ? const Color(0xFFF4F8FA) : null,
-    cardTheme: CardThemeData(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.6)),
-      ),
-    ),
-    appBarTheme: AppBarTheme(
-      backgroundColor: b == Brightness.light ? lmsBlue : null,
-      foregroundColor: b == Brightness.light ? Colors.white : null,
-      centerTitle: false,
-    ),
-    chipTheme: const ChipThemeData(showCheckmark: false),
-  );
-}
+ThemeData buildTheme(Brightness b) => buildAppTheme(b);
 
 String _locale(String lang) => lang == 'uz' ? 'uz' : (lang == 'ru' ? 'ru' : 'en');
 
@@ -41,7 +21,7 @@ String fmtWeekday(DateTime d, String lang) => DateFormat('EEEE', _locale(lang)).
 /// "2d 4h", "3h 10m", "25m".
 String fmtDuration(Duration d, String lang) {
   final u = switch (lang) {
-    'uz' => ('k', 's', 'daq'),
+    'uz' => ('kun', 'soat', 'daq'),
     'ru' => ('д', 'ч', 'мин'),
     _ => ('d', 'h', 'm'),
   };
@@ -66,10 +46,10 @@ String fmtNum(double? v) {
 /// Colour for a score on the 100-point scale (86+ excellent, 71+ good, 56+ pass).
 Color scoreColor(num? score, ColorScheme cs) {
   if (score == null) return cs.outline;
-  if (score >= 86) return const Color(0xFF2E9E5B);
-  if (score >= 71) return lmsBlue;
-  if (score >= 56) return const Color(0xFFE09A1A);
-  return const Color(0xFFD64545);
+  if (score >= 86) return Brand.success;
+  if (score >= 71) return Brand.primary;
+  if (score >= 55) return Brand.warning;
+  return Brand.danger;
 }
 
 /// Colour for points earned out of max.
@@ -91,9 +71,12 @@ IconData lessonTypeIcon(LessonType t) => switch (t) {
     };
 
 Color lessonTypeColor(LessonType t) => switch (t) {
-      LessonType.lecture => lmsBlue,
-      LessonType.practice => const Color(0xFF2E9E5B),
-      LessonType.laboratory => const Color(0xFF8E5BD6),
+      LessonType.lecture => Brand.primary,
+      LessonType.practice => const Color(0xFF14B8A6),
+      LessonType.laboratory => const Color(0xFF8B5CF6),
     };
 
 String weekdayShort(int weekday, S s) => s[const ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'][weekday - 1]];
+
+/// "17 866 395" (space-grouped, no decimals).
+String fmtMoney(double v) => NumberFormat('#,##0', 'en').format(v).replaceAll(',', ' ');

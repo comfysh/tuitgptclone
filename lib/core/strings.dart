@@ -5,6 +5,19 @@ import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
 import '../app_state.dart';
+import 'strings/today.dart';
+import 'strings/schedule.dart';
+import 'strings/tasks.dart';
+import 'strings/courses.dart';
+import 'strings/attendance.dart';
+import 'strings/exams.dart';
+import 'strings/grades.dart';
+import 'strings/profile.dart';
+import 'strings/files.dart';
+import 'strings/news.dart';
+import 'strings/chat.dart';
+import 'strings/welcome.dart';
+import 'strings/widget.dart';
 
 class S {
   final String lang;
@@ -13,7 +26,24 @@ class S {
   static S of(BuildContext context) => S(context.select<AppState, String>((a) => a.language));
   static S read(BuildContext context) => S(context.read<AppState>().language);
 
-  String operator [](String key) => _t[lang]?[key] ?? _t['en']![key] ?? key;
+  String operator [](String key) {
+    final own = _t[lang]?[key];
+    if (own != null) return own;
+    for (final t in _areas) {
+      final v = t[lang]?[key];
+      if (v != null) return v;
+    }
+    final en = _t['en']![key];
+    if (en != null) return en;
+    for (final t in _areas) {
+      final v = t['en']?[key];
+      if (v != null) return v;
+    }
+    return key;
+  }
+
+  /// Texts added per screen area (lib/core/strings/*.dart).
+  static const _areas = [todayStrings, scheduleStrings, tasksStrings, coursesStrings, attendanceStrings, examsStrings, gradesStrings, profileStrings, filesStrings, newsStrings, chatStrings, welcomeStrings, widgetStrings];
 
   String f(String key, Map<String, Object?> args) {
     var s = this[key];
@@ -63,6 +93,8 @@ class S {
       'lmsSite': 'LMS website',
       'profile': 'Profile & settings',
       'more': 'More',
+      'navGrades': 'Grades & GPA',
+      'navFiles': 'Files',
       // login
       'welcomeTitle': 'Your TUIT LMS in one app',
       'welcomeBody':
@@ -272,6 +304,8 @@ class S {
       'lmsSite': 'LMS sayti',
       'profile': 'Profil va sozlamalar',
       'more': "Ko'proq",
+      'navGrades': 'Baholar va GPA',
+      'navFiles': 'Fayllar',
       'welcomeTitle': 'TATU LMS — bitta ilovada',
       'welcomeBody':
           "lms.tuit.uz dagi dars jadvali, topshiriqlar, baholar, davomat va imtihonlar — bildirishnomalar va AI yordamchi bilan.",
@@ -472,6 +506,8 @@ class S {
       'lmsSite': 'Сайт LMS',
       'profile': 'Профиль и настройки',
       'more': 'Ещё',
+      'navGrades': 'Оценки и GPA',
+      'navFiles': 'Файлы',
       'welcomeTitle': 'LMS ТУИТ в одном приложении',
       'welcomeBody':
           'Расписание, дедлайны, оценки, посещаемость и экзамены из lms.tuit.uz — с уведомлениями и AI-помощником.',

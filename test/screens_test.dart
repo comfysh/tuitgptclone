@@ -93,18 +93,20 @@ LmsSnapshot sampleSnapshot(DateTime now) {
 }
 
 Future<void> _loadFonts() async {
-  final dir = '${Platform.environment['FLUTTER_ROOT'] ?? '/root/sdk/flutter'}/bin/cache/artifacts/material_fonts';
+  final sdk = '${Platform.environment['FLUTTER_ROOT'] ?? '/root/sdk/flutter'}/bin/cache/artifacts/material_fonts';
   Future<void> load(String family, List<String> files) async {
     final loader = FontLoader(family);
     for (final f in files) {
-      final file = File('$dir/$f');
+      final file = File(f);
       if (file.existsSync()) loader.addFont(Future.value(ByteData.view(file.readAsBytesSync().buffer)));
     }
     await loader.load();
   }
 
-  await load('Roboto', ['Roboto-Regular.ttf', 'Roboto-Medium.ttf', 'Roboto-Bold.ttf']);
-  await load('MaterialIcons', ['MaterialIcons-Regular.otf']);
+  await load('Inter', [
+    for (final w in ['Regular', 'Medium', 'SemiBold', 'Bold', 'ExtraBold']) 'assets/fonts/Inter-$w.ttf',
+  ]);
+  await load('MaterialIcons', ['$sdk/MaterialIcons-Regular.otf']);
 }
 
 void main() {
@@ -151,9 +153,7 @@ void main() {
           ],
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
-            theme: buildTheme(Brightness.light).copyWith(
-              textTheme: buildTheme(Brightness.light).textTheme.apply(fontFamily: 'Roboto'),
-            ),
+            theme: buildTheme(Brightness.light),
             home: e.value(),
           ),
         ));
