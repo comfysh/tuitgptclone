@@ -1,5 +1,14 @@
 # TuitMate: a personal TUIT LMS app with AI (Windows + Android)
 
+[![Build](https://github.com/comfysh/tuitgptclone/actions/workflows/build.yml/badge.svg)](https://github.com/comfysh/tuitgptclone/actions/workflows/build.yml)
+[![Latest release](https://img.shields.io/github/v/release/comfysh/tuitgptclone?label=release)](https://github.com/comfysh/tuitgptclone/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/comfysh/tuitgptclone/total)](https://github.com/comfysh/tuitgptclone/releases)
+![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20Windows-3C6EFF)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+**[⬇ Download the latest version](https://github.com/comfysh/tuitgptclone/releases/latest)**: `TuitMate-<version>.apk` for Android,
+`TuitMate-<version>-Setup.exe` for Windows.
+
 TuitMate is a personal, **unofficial** companion for [lms.tuit.uz](https://lms.tuit.uz), similar to TuitGPT.
 It shows everything from your LMS in a fast, clean app, sends notifications, and adds an AI study assistant.
 
@@ -38,15 +47,32 @@ It shows everything from your LMS in a fast, clean app, sends notifications, and
 
 ## Install
 
+All files are on the [**Releases**](https://github.com/comfysh/tuitgptclone/releases/latest) page:
+
+| File | For |
+|---|---|
+| `TuitMate-<version>.apk` | Android 7.0 or newer |
+| `TuitMate-<version>-Setup.exe` | Windows 10 / 11 (64-bit) installer |
+| `TuitMate-<version>-windows-portable.zip` | Windows without installing |
+| `SHA256SUMS.txt` | Checksums to check the files (see [SECURITY.md](SECURITY.md)) |
+
 ### Android
-1. Download `TuitMate.apk` (see *Getting the builds* below).
-2. Open it on your phone and allow **Install unknown apps** for your browser or file manager when Android asks.
-3. Open TuitMate and allow notifications.
+1. Download `TuitMate-<version>.apk` on your phone.
+2. Open it and allow **Install unknown apps** for your browser or file manager when Android asks.
+3. Open TuitMate and allow notifications. Long-press the home screen → **Widgets** → *TuitMate* to add the widget.
+
+A new version installs over the old one and keeps your data (as long as it is signed with the same key, see below).
 
 ### Windows 10 / 11
-- **Installer:** run `TuitMate-Setup.exe`. It installs for your user only, so no admin rights are needed. Tick *Start with Windows* if you want notifications all day.
-- **Portable:** unzip `TuitMate-windows-portable.zip` anywhere and run `TuitMate.exe`.
+- **Installer:** run `TuitMate-<version>-Setup.exe`. It installs for your user only, so no admin rights are needed. Tick *Start with Windows* if you want notifications all day.
+- **Portable:** unzip `TuitMate-<version>-windows-portable.zip` anywhere and run `TuitMate.exe`.
+- The app is not code-signed, so Windows may say *"Windows protected your PC"*: choose **More info → Run anyway**.
 - Login uses Microsoft Edge WebView2, which Windows 10/11 already include. If login shows a blank page, install the *WebView2 Runtime* from Microsoft.
+
+### Check a download
+Compare the file's SHA-256 with `SHA256SUMS.txt` from the same release:
+- Windows (PowerShell): `Get-FileHash .\TuitMate-<version>-Setup.exe -Algorithm SHA256`
+- Linux / macOS / Termux: `sha256sum -c SHA256SUMS.txt --ignore-missing`
 
 ## First start
 
@@ -73,8 +99,17 @@ Only Gemini reads PDFs directly. Word, PowerPoint, Excel and text files work wit
 
 ### Option A: GitHub builds them for you (recommended)
 The repo includes `.github/workflows/build.yml`:
-- Every push to `main` builds `TuitMate.apk` and the Windows app. Download them under **Actions → latest run → Artifacts**.
-- Push a tag such as `v1.0.0` (`git tag v1.0.0 && git push --tags`) and they're also attached to a **GitHub Release**.
+- Every push to `main` runs the tests and builds the APK and the Windows app (**Actions → latest run → Artifacts**).
+- **Releases are automatic:** when `main` has a version that has no release yet, the workflow publishes
+  release `v<version>` with the APK, the Windows installer, the portable zip, `SHA256SUMS.txt` and the notes
+  from [CHANGELOG.md](CHANGELOG.md). To publish a new version:
+  1. add a `## [1.0.1] - date` section to `CHANGELOG.md`,
+  2. set `version: 1.0.1+2` in `pubspec.yaml` and `appVersion = '1.0.1'` in `lib/core/version.dart`
+     (a test checks that they match),
+  3. push to `main`.
+- **Rebuild a release** (for example after adding the signing key below): **Actions → Build apps → Run workflow**
+  on `main`. It replaces the release of the current version with fresh files.
+- Pushing a tag such as `v1.0.0` also publishes (or refreshes) that release.
 
 #### Keep Android updates working (one-time step)
 Android only installs a new APK over the old one if both are signed with the **same key**.
@@ -133,3 +168,9 @@ LMS sometimes changes its pages. Each screen has an **Open in LMS** button (🌐
 - Your LMS password and AI keys are kept in the OS keystore and never sent anywhere except lms.tuit.uz (password) or the AI provider you chose (key).
 - Your LMS data is cached on your device for offline use.
 - The AI only receives your LMS summary when **Use my LMS data** is on (AI tab → ⋮ menu).
+- **Sign out** (Profile) deletes the cached data, chats, saved password, AI keys and the widget's data.
+- More in [SECURITY.md](SECURITY.md), including how to report a security problem privately.
+
+## License
+
+[MIT](LICENSE). The Inter font is under the SIL Open Font License 1.1. TuitMate is unofficial and not affiliated with TUIT.

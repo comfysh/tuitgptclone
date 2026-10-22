@@ -11,13 +11,11 @@ import '../core/format.dart';
 import '../core/settings.dart';
 import '../core/storage.dart';
 import '../core/strings.dart';
+import '../core/version.dart';
 import '../lms/models.dart';
 import '../services/notifier.dart';
 import 'lms_web_page.dart';
 import 'widgets.dart';
-
-/// Shown in About (keep in sync with pubspec.yaml).
-const _appVersion = '1.0.0';
 
 /// Profile (student info, tuition contract) and all app settings.
 class ProfileScreen extends StatelessWidget {
@@ -640,7 +638,7 @@ class _SettingsSections extends StatelessWidget {
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(s['appName'], style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-                  Text(s.f('pfVersion', {'v': _appVersion}), style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
+                  Text(s.f('pfVersion', {'v': appVersion}), style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
                 ]),
               ),
             ]),

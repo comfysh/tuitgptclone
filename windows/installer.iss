@@ -1,6 +1,9 @@
 ; Inno Setup script for the Windows installer (used by the GitHub workflow).
 #define AppName "TuitMate"
-#define AppVersion "1.0.0"
+; The release workflow passes the pubspec.yaml version with /DAppVersion=x.y.z.
+#ifndef AppVersion
+  #define AppVersion "1.0.0"
+#endif
 
 [Setup]
 AppId={{6F1C3B0E-6A54-4D1E-9A3E-2F73C8A1B7D4}

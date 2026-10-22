@@ -1,8 +1,13 @@
 name: Build apps
 
-# Builds the Android APK and the Windows app.
-# - Every push to main: download them from the run's "Artifacts".
-# - Push a tag like v1.0.0: they are also attached to a GitHub Release.
+# Builds the Android APK and the Windows app, and publishes them as a GitHub Release.
+# - Every push to main: the files are under the run's "Artifacts".
+# - A new version in pubspec.yaml (e.g. 1.0.0 -> 1.0.1) pushed to main: release v1.0.1 is
+#   published with the APK, the Windows installer, a portable zip, SHA256SUMS.txt and notes
+#   from CHANGELOG.md. The same version is not published twice.
+# - Actions -> Build apps -> Run workflow: publishes the current version again from main
+#   (for example after adding the Android signing key).
+# - Pushing a tag like v1.0.0 also publishes (or refreshes) that release.
 on:
   push:
     branches: [main]
@@ -19,7 +24,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -33,8 +38,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
@@ -48,6 +53,7 @@ jobs:
       # Add the repository secret ANDROID_KEYSTORE_BASE64 (see README). The other
       # three secrets are optional and default to the values shown.
       - name: Restore signing key
+        id: key
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -56,6 +62,7 @@ jobs:
         run: |
           if [ -z "$KS_B64" ]; then
             echo "::warning::ANDROID_KEYSTORE_BASE64 is not set; the APK is signed with a temporary key and won't update an installed copy."
+            echo "own_key=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "$KS_B64" | base64 -d > android/app/upload.jks
@@ -67,22 +74,30 @@ jobs:
             echo "keyAlias=${A//\\/\\\\}"
             echo "keyPassword=${KP//\\/\\\\}"
           } > android/key.properties
+          echo "own_key=true" >> "$GITHUB_OUTPUT"
       - run: flutter build apk --release
-      - run: cp build/app/outputs/flutter-apk/app-release.apk TuitMate.apk
-      - uses: actions/upload-artifact@v4
+      - name: Record the signing certificate
+        env:
+          OWN_KEY: ${{ steps.key.outputs.own_key }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk TuitMate.apk
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          # Shown in the release notes; a missing tool must not block the release.
+          cert=$("$apksigner" verify --print-certs TuitMate.apk 2>/dev/null | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' || true)
+          echo "APK signing certificate SHA-256: $cert"
+          printf 'cert_sha256=%s\nown_key=%s\n' "$cert" "${OWN_KEY:-false}" > signing.txt
+      - uses: actions/upload-artifact@v7
         with:
           name: TuitMate-android
-          path: TuitMate.apk
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: TuitMate.apk
+          path: |
+            TuitMate.apk
+            signing.txt
 
   windows:
     needs: test
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -102,18 +117,67 @@ jobs:
           }
           $iscc = Find-Iscc
           if (-not $iscc) { choco install innosetup -y --no-progress; $iscc = Find-Iscc }
-          & $iscc.FullName "/O$($PWD.Path)" windows/installer.iss
-      - uses: actions/upload-artifact@v4
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*(\d+\.\d+\.\d+)').Matches[0].Groups[1].Value
+          & $iscc.FullName "/DAppVersion=$version" "/O$($PWD.Path)" windows/installer.iss
+      - uses: actions/upload-artifact@v7
         with:
           name: TuitMate-windows
           path: |
             TuitMate-windows-portable.zip
             TuitMate-Setup.exe
           if-no-files-found: warn
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+
+  release:
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    concurrency: release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Version
+        id: v
+        run: |
+          VERSION=$(sed -nE 's/^version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' pubspec.yaml)
+          [ -n "$VERSION" ] || { echo "::error::No version in pubspec.yaml"; exit 1; }
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then TAG="$GITHUB_REF_NAME"; TAG_REF=true; else TAG="v$VERSION"; TAG_REF=false; fi
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then EXISTS=true; else EXISTS=false; fi
+          PUBLISH=true
+          if [ "$EXISTS" = true ] && [ "$GITHUB_EVENT_NAME" = push ] && [ "$TAG_REF" = false ]; then
+            PUBLISH=false
+            echo "::notice::Release $TAG already exists. Raise the version in pubspec.yaml to publish a new one, or use Run workflow to rebuild this one."
+          fi
+          {
+            echo "version=$VERSION"; echo "tag=$TAG"; echo "tag_ref=$TAG_REF"
+            echo "exists=$EXISTS"; echo "publish=$PUBLISH"
+          } >> "$GITHUB_OUTPUT"
+      - if: steps.v.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
         with:
-          files: |
-            TuitMate-windows-portable.zip
-            TuitMate-Setup.exe
-          fail_on_unmatched_files: false
+          pattern: TuitMate-*
+          path: dist
+          merge-multiple: true
+      - name: Name files, checksums and notes
+        if: steps.v.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: bash .github/scripts/release.sh prepare dist out
+      - name: Publish release
+        if: steps.v.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          TAG: ${{ steps.v.outputs.tag }}
+          TAG_REF: ${{ steps.v.outputs.tag_ref }}
+          EXISTS: ${{ steps.v.outputs.exists }}
+        run: |
+          bash .github/scripts/release.sh publish out
+          {
+            echo "### Release $TAG published"
+            echo "https://github.com/$REPO/releases/tag/$TAG"
+            echo
+            cat out/SHA256SUMS.txt | sed 's/^/    /'
+          } >> "$GITHUB_STEP_SUMMARY"
