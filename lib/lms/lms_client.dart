@@ -141,10 +141,22 @@ class LmsClient {
 
   // ------------------------------------------------------------- endpoints
 
-  Future<StudentInfo> info() async => parseInfo(await getHtml('/student/info'));
+  /// Profile and tuition contract (same page).
+  Future<(StudentInfo, List<ContractYear>)> info() async {
+    final d = await getHtml('/student/info');
+    return (parseInfo(d), _tryList(() => parseContracts(d)));
+  }
+
+  static List<T> _tryList<T>(List<T> Function() f) {
+    try {
+      return f();
+    } catch (_) {
+      return <T>[];
+    }
+  }
 
   Future<List<Semester>> semesters() async {
-    for (final page in const ['/student/my-courses', '/student/attendance', '/student/finals', '/student/schedule']) {
+    for (final page in const ['/student/my-courses', '/student/finals', '/student/schedule']) {
       try {
         final list = parseSemesters(await getHtml(page));
         if (list.isNotEmpty) return list;
@@ -164,28 +176,39 @@ class LmsClient {
   Future<List<ExamFinal>> finals(int semesterId) async =>
       parseFinals(await getJson('/student/finals/data?semester_id=$semesterId'));
 
-  Future<List<ScheduleItem>> schedule(int semesterId) async =>
-      parseSchedule(await getJson('/student/schedule/load/$semesterId'));
+  /// Timetable entries plus the LMS's own "this week is odd/even" marker.
+  Future<(List<ScheduleItem>, (DateTime, WeekSide)?)> schedule(int semesterId) async {
+    final json = await getJson('/student/schedule/load/$semesterId');
+    return (parseSchedule(json), parseWeekInfo(json));
+  }
 
   Future<CoursePage?> coursePage(Course c) async =>
       parseCoursePage(await getHtml('/student/my-courses/show/${c.id}'), c);
 
   Future<List<Lesson>> lessons(int courseId) async => parseLessons(await getHtml('/student/calendar/$courseId'));
 
-  Future<List<Discipline>> studyPlan() async => parseStudyPlan(await getHtml('/student/study-plan'));
+  /// Subjects by semester plus the GPA badge.
+  Future<(List<Discipline>, StudyPlanSummary)> studyPlan() async {
+    final d = await getHtml('/student/study-plan');
+    return (parseStudyPlan(d), parseStudyPlanSummary(d));
+  }
 
-  Future<List<NewsItem>> news({int limit = 9}) async {
-    final links = parseNewsLinks(await getHtml('/dashboard/news')).take(limit).toList();
-    final items = await Future.wait(links.map((u) async {
+  /// News from the list page; full text is fetched only for posts not seen before.
+  Future<List<NewsItem>> news({int limit = 9, Map<String, NewsItem> known = const {}}) async {
+    final list = parseNewsList(await getHtml('/dashboard/news')).take(limit).toList();
+    final items = await Future.wait(list.map((n) async {
+      final old = known[n.key];
+      if (old?.body != null) return NewsItem(title: n.title, body: old!.body, date: n.date ?? old.date, url: n.url);
       try {
-        return parseNewsPage(await getHtml(u), u);
+        final full = parseNewsPage(await getHtml(n.url!), n.url!);
+        return full == null ? n : NewsItem(title: full.title, body: full.body, date: full.date ?? n.date, url: n.url);
       } on SessionExpiredException {
         rethrow;
       } catch (_) {
-        return null;
+        return n;
       }
     }));
-    return items.whereType<NewsItem>().toList();
+    return items;
   }
 
   /// Uploads an answer file for an assignment (LMS limit: 50 MB).

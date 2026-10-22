@@ -19,6 +19,16 @@ class LmsSnapshot {
   DateTime? updatedAt;
   Map<String, String> errors;
 
+  /// Monday of a week whose odd/even side the LMS told us, and that side.
+  DateTime? weekRefMonday;
+  WeekSide? weekRefSide;
+
+  /// Tuition contract by academic year (current first).
+  List<ContractYear> contracts;
+
+  /// GPA badge and notice from the study plan page.
+  StudyPlanSummary? planSummary;
+
   LmsSnapshot({
     this.info,
     this.semesters = const [],
@@ -33,6 +43,10 @@ class LmsSnapshot {
     this.news = const [],
     this.updatedAt,
     this.errors = const {},
+    this.weekRefMonday,
+    this.weekRefSide,
+    this.contracts = const [],
+    this.planSummary,
   });
 
   bool get isEmpty => updatedAt == null;
@@ -67,6 +81,10 @@ class LmsSnapshot {
         'news': news.map((e) => e.toJson()).toList(),
         'updatedAt': updatedAt?.toIso8601String(),
         'errors': errors,
+        'weekRefMonday': weekRefMonday?.toIso8601String(),
+        'weekRefSide': weekRefSide?.value,
+        'contracts': contracts.map((e) => e.toJson()).toList(),
+        'planSummary': planSummary?.toJson(),
       };
 
   static List<T> _list<T>(dynamic v, T Function(Map<String, dynamic>) f) =>
@@ -88,6 +106,11 @@ class LmsSnapshot {
         news: _list(j['news'], NewsItem.fromJson),
         updatedAt: j['updatedAt'] == null ? null : DateTime.tryParse(j['updatedAt']),
         errors: Map<String, String>.from(j['errors'] ?? const {}),
+        weekRefMonday: j['weekRefMonday'] == null ? null : DateTime.tryParse(j['weekRefMonday']),
+        weekRefSide: j['weekRefSide'] == null ? null : WeekSide.fromValue(j['weekRefSide']),
+        contracts: _list(j['contracts'], ContractYear.fromJson),
+        planSummary:
+            j['planSummary'] == null ? null : StudyPlanSummary.fromJson(Map<String, dynamic>.from(j['planSummary'])),
       );
 }
 
@@ -141,14 +164,22 @@ Future<LmsSnapshot> fetchSnapshot(
   final base = prev.semesterId == sid ? prev : LmsSnapshot();
 
   final results = await Future.wait<dynamic>([
-    full || prev.info == null ? section('info', c.info, prev.info) : Future.value(prev.info),
+    full || prev.info == null
+        ? section<(StudentInfo, List<ContractYear>)?>('info', c.info, prev.info == null ? null : (prev.info!, prev.contracts))
+        : Future.value(prev.info == null ? null : (prev.info!, prev.contracts)),
     section('courses', () => c.courses(sid), base.courses),
-    section('schedule', () => c.schedule(sid), base.schedule),
+    section<(List<ScheduleItem>, (DateTime, WeekSide)?)>(
+        'schedule',
+        () => c.schedule(sid),
+        (base.schedule, base.weekRefMonday == null ? null : (base.weekRefMonday!, base.weekRefSide!))),
     section('attendance', () => c.absences(sid), base.absences),
     section('exams', () => c.finals(sid), base.finals),
-    full ? section('studyPlan', c.studyPlan, prev.studyPlan) : Future.value(prev.studyPlan),
+    full
+        ? section<(List<Discipline>, StudyPlanSummary?)>(
+            'studyPlan', () async => await c.studyPlan(), (prev.studyPlan, prev.planSummary))
+        : Future.value((prev.studyPlan, prev.planSummary)),
     section('news', () async {
-      final fresh = await c.news(limit: full ? 9 : 3);
+      final fresh = await c.news(limit: full ? 9 : 3, known: {for (final n in prev.news) n.key: n});
       final seen = {for (final n in fresh) n.key};
       // Keep older items so a light sync never shrinks the list (that would
       // make the next full sync announce old posts as new).
@@ -177,17 +208,23 @@ Future<LmsSnapshot> fetchSnapshot(
   }
   await _pool(tasks, 4);
 
+  final infoRes = results[0] as (StudentInfo, List<ContractYear>)?;
+  final planRes = results[5] as (List<Discipline>, StudyPlanSummary?);
   return LmsSnapshot(
-    info: results[0] as StudentInfo?,
+    info: infoRes?.$1,
+    contracts: infoRes?.$2 ?? prev.contracts,
+    planSummary: planRes.$2,
     semesters: semesters,
     semesterId: sid,
     courses: courses,
-    schedule: results[2] as List<ScheduleItem>,
+    schedule: (results[2] as (List<ScheduleItem>, (DateTime, WeekSide)?)).$1,
+    weekRefMonday: (results[2] as (List<ScheduleItem>, (DateTime, WeekSide)?)).$2?.$1,
+    weekRefSide: (results[2] as (List<ScheduleItem>, (DateTime, WeekSide)?)).$2?.$2,
     absences: results[3] as List<Absence>,
     finals: results[4] as List<ExamFinal>,
     coursePages: pages,
     lessons: lessons,
-    studyPlan: results[5] as List<Discipline>,
+    studyPlan: planRes.$1,
     news: results[6] as List<NewsItem>,
     updatedAt: DateTime.now(),
     errors: errors,

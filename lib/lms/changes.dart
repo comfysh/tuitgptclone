@@ -1,7 +1,7 @@
 import 'models.dart';
 import 'snapshot.dart';
 
-enum ChangeKind { newAssignment, deadlineChanged, gradePosted, examGrade, examChanged, newAbsence, news, reminder }
+enum ChangeKind { newAssignment, deadlineChanged, gradePosted, examGrade, examChanged, newAbsence, news, reminder, newFile }
 
 class LmsChange {
   final ChangeKind kind;
@@ -108,6 +108,23 @@ List<LmsChange> diffSnapshots(LmsSnapshot old, LmsSnapshot now) {
     for (final a in now.absences) {
       if (!oldAbs.contains(a.key)) {
         out.add(LmsChange(ChangeKind.newAbsence, a.key, a.subject, a.lessonType ?? '', when: a.date));
+      }
+    }
+  }
+
+  // New teacher materials (lesson files), only for courses whose lessons were
+  // loaded both times.
+  for (final e in now.lessons.entries) {
+    final before = old.lessons[e.key];
+    if (before == null || before.isEmpty) continue;
+    final oldUrls = {for (final l in before) for (final f in l.files) f.url};
+    final course = now.courseById(e.key);
+    var added = 0;
+    for (final l in e.value) {
+      for (final f in l.files) {
+        if (oldUrls.contains(f.url) || added >= 3) continue;
+        added++;
+        out.add(LmsChange(ChangeKind.newFile, 'file|${f.url}', course?.subject ?? '', f.name, when: l.date));
       }
     }
   }

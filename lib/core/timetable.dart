@@ -18,6 +18,10 @@ WeekSide weekSideFor(DateTime day, Settings settings, LmsSnapshot snap) {
   if (anchor != null && anchorSide != null) {
     return weeksBetween(anchor, day).isEven ? anchorSide : _other(anchorSide);
   }
+  // The LMS says which week it is.
+  if (snap.weekRefMonday != null && snap.weekRefSide != null) {
+    return weeksBetween(snap.weekRefMonday!, day).isEven ? snap.weekRefSide! : _other(snap.weekRefSide!);
+  }
   DateTime? first;
   for (final ls in snap.lessons.values) {
     for (final l in ls) {

@@ -93,6 +93,8 @@ class Notifier {
         return '${s['nb']} · ${c.when != null ? fmtDate(c.when!, lang) : ''} ${c.detail}';
       case ChangeKind.news:
         return c.detail.length > 140 ? '${c.detail.substring(0, 140)}…' : c.detail;
+      case ChangeKind.newFile:
+        return c.detail;
       case ChangeKind.reminder:
         final left = c.when!.difference(DateTime.now());
         return '${c.detail} · ${s.f('dueIn', {'t': fmtDuration(left, lang)})}';
@@ -109,6 +111,7 @@ class Notifier {
       ChangeKind.newAbsence => {'en': 'Absence recorded', 'uz': 'NB qo‘yildi', 'ru': 'Отмечен пропуск'},
       ChangeKind.news => {'en': 'LMS news', 'uz': 'LMS yangiligi', 'ru': 'Новость LMS'},
       ChangeKind.reminder => {'en': 'Deadline soon', 'uz': 'Muddat yaqin', 'ru': 'Скоро дедлайн'},
+      ChangeKind.newFile => {'en': 'New material', 'uz': 'Yangi material', 'ru': 'Новый материал'},
     };
     return '${head[s.lang] ?? head['en']} · ${c.subject}';
   }

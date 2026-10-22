@@ -33,12 +33,11 @@ String? fileNameFromDisposition(String? cd) {
 /// when the link text has no extension.
 String bestFileName(String url, String label) {
   final fromUrl = LmsClient.fileNameFromUrl(url, fallback: '');
-  if (label.contains('.') && label.lastIndexOf('.') > label.length - 7) return label;
-  if (fromUrl.isNotEmpty) {
-    final ext = fromUrl.substring(fromUrl.lastIndexOf('.'));
-    return label.isEmpty ? fromUrl : '$label$ext';
-  }
-  return label.isEmpty ? 'file' : label;
+  final ext = fromUrl.contains('.') ? fromUrl.substring(fromUrl.lastIndexOf('.')) : '';
+  if (label.isEmpty) return fromUrl.isEmpty ? 'file' : fromUrl;
+  // "Practice_9.1" has a dot but no extension: check against the URL's real one.
+  if (ext.isEmpty || label.toLowerCase().endsWith(ext.toLowerCase())) return label;
+  return '$label$ext';
 }
 
 /// Shows progress/result text somewhere other than a SnackBar (e.g. inside a
