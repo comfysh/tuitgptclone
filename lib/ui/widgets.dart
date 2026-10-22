@@ -183,7 +183,7 @@ class _Banner extends StatelessWidget {
           TintIcon(icon, color: color, size: 36),
           const SizedBox(width: 12),
           Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w600))),
-          if (action != null) action!,
+          ?action,
         ]),
       ),
     );
@@ -204,7 +204,7 @@ class SectionTitle extends StatelessWidget {
         Expanded(
           child: Text(text, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         ),
-        if (trailing != null) trailing!,
+        ?trailing,
       ]),
     );
   }

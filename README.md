@@ -7,11 +7,12 @@ It shows everything from your LMS in a fast, clean app, sends notifications, and
 > and only writes to LMS when **you** upload an answer.
 
 <p>
-  <img src="docs/screenshots/phone-today.png" width="220" alt="Today on Android">
-  <img src="docs/screenshots/phone-schedule.png" width="220" alt="Schedule with odd/even week">
-  <img src="docs/screenshots/phone-attendance.png" width="220" alt="Attendance against the 74-hour limit">
+  <img src="docs/screenshots/phone-today.png" width="200" alt="Today on Android">
+  <img src="docs/screenshots/phone-schedule.png" width="200" alt="Schedule with odd/even week">
+  <img src="docs/screenshots/phone-grades.png" width="200" alt="Grades and GPA">
+  <img src="docs/screenshots/phone-dark.png" width="200" alt="Dark theme">
 </p>
-<img src="docs/screenshots/pc-today.png" width="680" alt="TuitMate on Windows">
+<img src="docs/screenshots/pc-courses.png" width="680" alt="TuitMate on Windows">
 
 *(Screenshots use sample data.)*
 
@@ -19,14 +20,17 @@ It shows everything from your LMS in a fast, clean app, sends notifications, and
 
 | | |
 |---|---|
-| **Today** | Current / next class with countdown, today's classes with breaks, upcoming deadlines, absence meter, next exam |
-| **Schedule** | Weekly timetable from LMS with **odd / even week** handling (*toq / juft*, left/right side). If the week is wrong, tap **"Wrong week?"** to correct it. Lesson topics for that date come from the course calendar. |
-| **Deadlines** | All assignments from every course: deadline, countdown, grade, teacher file. Filters: *not submitted / submitted / graded / overdue*. **Upload your answer (≤ 50 MB)** straight from your phone or PC. |
-| **Courses & grades** | Rating per course (points, %, grade), assignment list, lectures/practicals/labs with **teacher files** to download, and your full study plan with grades. |
-| **Attendance** | Hours used against the **74-hour** semester limit (1 NB = 2 academic hours; both are adjustable), how many classes you can still miss, per-subject breakdown, list of every NB. |
-| **Exams** | Exam date, time, room and format, with a countdown; final scores colour-coded on the 100-point scale; test points. |
-| **News** | LMS dashboard news. |
-| **Notifications** | New assignment, changed deadline, new grade, exam result or change, new absence, news, deadline reminders (24 h and 3 h before), optional "class in 10 minutes" reminders. On Android checks run in the background every 15–120 min, even when the app is closed. On Windows they run while the app is open. |
+| **Today** | Current / next class with a countdown ring, today's classes with breaks, nearest deadlines, open tasks, NB hours, GPA, average rating, next exam, tuition debt |
+| **Schedule** | Week strip with dates on phones, a full **weekly grid** on PC. **Odd / even weeks** (*toq / juft*) handled automatically; tap the week tag to correct it. Classes you missed are marked **NB**. Lesson topics for that date come from the course calendar. |
+| **Tasks** | Every assignment grouped by *overdue / today / tomorrow / this week / later / waiting for grade / graded*, with search and course filters. The task sheet shows the criteria, the teacher's file, your answer and the grade. **Upload your answer (≤ 50 MB)** straight from your phone or PC. |
+| **Courses** | Rating per course and the grade it is heading for (from the work graded so far, so tasks that aren't due yet don't drag it down), a **grade forecast** (how many points you still need for a 3, 4 or 5), lectures / practicals / labs with **teacher files** and your NBs, and the written exam questions. |
+| **Grades & GPA** | GPA (as the LMS shows it), credits earned, grade distribution, every semester of your study plan, and a **GPA simulator**: pick the grades you expect and see your new GPA. |
+| **Files** | Every teacher file of the semester in one place: search, filter by type or course, open, or **Ask AI** about it. |
+| **Attendance** | Hours used against the **74-hour** semester limit (1 NB = 2 academic hours; both adjustable), how many classes you can still miss, per-subject breakdown, every NB (excused ones marked). |
+| **Exams** | Exam date, time, room and format with a live countdown, results, test points, written questions. |
+| **News** | LMS news with a full article view. |
+| **Home-screen widget** (Android) | *TuitMate · Today*: the current or next class, the nearest deadline, today's classes, open tasks and NB hours. Updates itself at each class start and end, even when the app is closed. |
+| **Notifications** | New assignment, changed deadline, new grade, exam result or change, new absence, new teacher file, news, deadline reminders (24 h and 3 h before), optional "class in 10 minutes" reminders. On Android checks run in the background every 15–120 min, even when the app is closed. On Windows they run while the app is open. |
 | **AI assistant** | A chat that knows your timetable, deadlines, grades, attendance and exams. Attach PDFs, Word, PowerPoint, Excel, images or text, or tap **Ask AI** on any teacher file or assignment. Replies support formulas (LaTeX) and code. |
 | **Ask in ChatGPT** | You have ChatGPT Plus but no API key, so this button copies your question **together with your LMS context**, then opens ChatGPT (browser or app) so you can paste it there. |
 | **LMS website** | The full lms.tuit.uz inside the app, already signed in, for anything not covered above. |
@@ -109,11 +113,14 @@ Then turn it into one line of text:
 ```
 lib/
   lms/        LMS client (session cookies, endpoints), HTML/JSON parsers, data snapshot, change detection
-  core/       settings, storage (cache + keystore), timetable/odd-even week + attendance math, texts (uz/ru/en), formatting
-  services/   notifications, Android background checks (WorkManager)
+  core/       settings, storage (cache + keystore), timetable/odd-even week + attendance math, grade forecast and
+              expected grade, file library, texts (uz/ru/en), formatting
+  services/   notifications, Android background checks (WorkManager), Android home-screen widget data
   ai/         Gemini / OpenAI-compatible streaming, LMS context for the AI, file text extraction, chat history
-  ui/         screens (Today, Schedule, Deadlines, Courses, Attendance, Exams, News, AI, Profile/Settings, LMS website)
-test/         parser and logic tests (flutter test)
+  ui/         design system (design.dart, cards.dart) and screens (Today, Schedule, Tasks, Courses, Grades & GPA,
+              Attendance, Exams, Files, News, AI, Profile/Settings, LMS website)
+android/…/TuitWidgetProvider.kt   the home-screen widget
+test/         parser and logic tests, and every screen rendered at phone / PC size and in dark mode (flutter test)
 ```
 
 ## If something looks wrong

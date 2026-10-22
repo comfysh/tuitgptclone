@@ -33,10 +33,11 @@ void main() {
   test('courses, absences, finals JSON', () {
     final courses = parseCourses({
       'data': [
-        {'id': 501, 'subject': 'Data structures &#039;A&#039;', 'subject_id': 9, 'attendance': 3, 'streams': 'DS-201###DS-201-a1', 'teachers': 'Aliyev A.###Karimova B.', 'falied': false}
+        {'id': 501, 'subject': 'Data structures &#039;A&#039;', 'subject_id': 9, 'attendance': 3, 'streams': 'DS-201###DS-201-a1', 'teachers': 'Aliyev A.###Karimova B.###Aliyev A.', 'falied': false}
       ]
     });
     expect(courses.single.subject, "Data structures 'A'");
+    // Listed once per class type on the LMS; shown once.
     expect(courses.single.teachers, ['Aliyev A.', 'Karimova B.']);
     expect(courses.single.absenceCount, 3);
 

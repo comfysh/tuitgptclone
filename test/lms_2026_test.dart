@@ -38,7 +38,7 @@ const _coursePage = '''
   <td>Teacher One</td>
   <td><div class="sc-activity-title">2-practical work</div>
       <a href="https://lms.tuit.uz/uploads/samples/KK/KP/Ha/1791650910.zip" class="btn btn-default btn-xs"><i class="fa fa-download"></i> 2-practica...</a></td>
-  <td><span class="sc-deadline">28-10-2026 23:59:59</span></td>
+  <td><span class="sc-deadline">28-10-2099 23:59:59</span></td>
   <td><div class="sc-score"><span style="color:#a0aec0">—</span><span class="sc-max">/ 5</span></div>
       <div><button onclick="toggleCriteria(153541)" class="btn btn-default btn-xs">Criteria</button></div></td>
   <td><a href="#" data-target="#uploadModal" data-toggle="modal" class="btn btn-primary btn-sm sc-btn-upload js-btn-upload" data-id="153541"><i class="fa fa-upload"></i> Upload assignment</a></td>
@@ -47,7 +47,7 @@ const _coursePage = '''
   <td><span class="sc-badge">Practice</span></td>
   <td>Teacher Two</td>
   <td><div class="sc-activity-title">1-practice</div></td>
-  <td><span class="sc-deadline">25-10-2026 23:59:59</span></td>
+  <td><span class="sc-deadline">25-10-2099 23:59:59</span></td>
   <td><div class="sc-score"><span>—</span><span class="sc-max">/ 5</span></div></td>
   <td><a href="https://lms.tuit.uz/uploads/activities/KK/cB/M2/1792586029.zip" class="btn btn-default btn-sm">My_file...</a>
       <div><button href="#" class="btn btn-default btn-xs js-btn-upload" data-id="155787">Resend</button></div></td>
@@ -263,10 +263,13 @@ void main() {
     final page = parseCoursePage(parseHtml(_coursePage), _course)!;
     final f = forecastFor(page);
     expect(f.percent, closeTo(12.5, 0.01));
-    expect(f.openPoints, 20); // 5 + 5 + 10 still ungraded
+    // 5 + 5 still open; the expired 10-point task can't earn points any more.
+    expect(f.openPoints, 10);
     final five = f.targets.firstWhere((t) => t.grade == 5);
     expect(five.pointsNeeded, closeTo(29.4, 0.01)); // 86% of 40 = 34.4, minus 5
-    expect(five.reachable, isFalse); // only 20 points still open
-    expect(f.targets.firstWhere((t) => t.grade == 3).reachable, isTrue); // needs 17
+    expect(five.reachable, isFalse); // only 10 points still open
+    expect(f.targets.firstWhere((t) => t.grade == 3).reachable, isFalse); // needs 17
+    // On graded + missed work only: 5 of 15 points.
+    expect(standingFor(page).percent, closeTo(33.3, 0.1));
   });
 }

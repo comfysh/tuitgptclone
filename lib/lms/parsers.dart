@@ -237,7 +237,8 @@ List<Course> parseCourses(dynamic json) => _dataList(json)
             subjectId: (m['subject_id'] as num?)?.toInt() ?? 0,
             absenceCount: int.tryParse('${m['attendance'] ?? 0}') ?? 0,
             streams: _splitHash(m['streams']),
-            teachers: _splitHash(m['teachers']),
+            // The LMS lists a teacher once per class type (lecture, practice…).
+            teachers: _splitHash(m['teachers']).toSet().toList(),
             failed: (m['failed'] ?? m['falied']) == true,
             questionsUrl: m['download_questions_url'] is String && (m['download_questions_url'] as String).isNotEmpty
                 ? absoluteUrl(m['download_questions_url'] as String)

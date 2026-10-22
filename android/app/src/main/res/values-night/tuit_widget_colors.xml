@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark mode: the deeper brand gradient (Brand.heroDark in lib/ui/design.dart). -->
+<resources>
+    <color name="tuit_widget_start">#2A47C9</color>
+    <color name="tuit_widget_end">#4B3FC2</color>
+    <color name="tuit_widget_now_text">#2A47C9</color>
+</resources>

@@ -10,6 +10,7 @@ import 'lms/lms_client.dart';
 import 'lms/models.dart';
 import 'lms/snapshot.dart';
 import 'services/background.dart';
+import 'services/home_widget_service.dart';
 import 'services/notifier.dart';
 import 'services/web_env.dart';
 
@@ -59,6 +60,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   void setLanguage(String v) {
     settings.language = v;
     notifyListeners();
+    // The home-screen widget shows its texts in the app language.
+    refreshWidget();
   }
 
   void setThemeMode(ThemeMode v) {
@@ -67,7 +70,16 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Call after changing any setting that affects what is shown.
-  void touch() => notifyListeners();
+  void touch() {
+    notifyListeners();
+    // Week parity, lesson length and NB limits change what the widget shows.
+    refreshWidget();
+  }
+
+  /// Rewrites the Android home-screen widget from the current data.
+  void refreshWidget() {
+    if (loggedIn && !snapshot.isEmpty) unawaited(HomeWidgetService.update(snapshot, settings));
+  }
 
   Future<void> configureBackground() async {
     try {
@@ -157,6 +169,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       try {
         await Notifier.processChanges(base.isEmpty ? null : base, fresh, settings, storage);
       } catch (_) {}
+      if (loggedIn && client.epoch == epoch) unawaited(HomeWidgetService.update(fresh, settings));
     } on SessionExpiredException {
       if (loggedIn && client.epoch == epoch) sessionExpired = true;
     } catch (e) {
@@ -201,6 +214,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           snapshot.coursePages = {...snapshot.coursePages, course.id: page};
           await storage.saveSnapshot(snapshot);
           notifyListeners();
+          refreshWidget(); // the submitted task is no longer open
         }
       } catch (_) {}
     }
@@ -238,6 +252,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       try {
         await Background.cancel();
       } catch (_) {}
+      await HomeWidgetService.clear(); // nothing personal on the home screen
       await WebEnv.clearCookies();
       await storage.clearAll();
       await Secrets.deleteAll();
@@ -252,6 +267,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       try {
         await Notifier.cancelAll();
       } catch (_) {}
+      await HomeWidgetService.clear();
       await client.logout();
       await storage.clearAll();
     }

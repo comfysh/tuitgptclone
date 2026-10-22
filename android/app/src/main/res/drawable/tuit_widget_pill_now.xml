@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Now · 10:00–11:20" badge (solid, like the Today screen). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/tuit_widget_pill_now" />
+    <corners android:radius="10dp" />
+</shape>

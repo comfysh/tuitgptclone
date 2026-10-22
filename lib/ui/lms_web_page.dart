@@ -12,6 +12,7 @@ import '../lms/lms_client.dart';
 import '../lms/parsers.dart';
 import '../services/web_env.dart';
 import 'files.dart';
+import 'widgets.dart';
 
 /// Shows the real lms.tuit.uz in an embedded browser.
 /// In [loginMode] it captures the session cookie after you sign in
@@ -39,10 +40,19 @@ class _LmsWebPageState extends State<LmsWebPage> {
   String? _savedLogin;
   String? _savedPassword;
 
+  /// Page being shown; only used to display its host in the title bar.
+  WebUri? _url;
+
   @override
   void initState() {
     super.initState();
+    _url = WebUri(_startUrl);
     _loadCreds();
+  }
+
+  void _showUrl(WebUri? url) {
+    if (url == null || !mounted || url.toString() == _url?.toString()) return;
+    setState(() => _url = url);
   }
 
   Future<void> _loadCreds() async {
@@ -137,22 +147,64 @@ class _LmsWebPageState extends State<LmsWebPage> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final narrow = MediaQuery.sizeOf(context).width < 480;
+    final host = _url?.host ?? '';
+    final secure = _url?.scheme == 'https';
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.loginMode ? s['signIn'] : s['lmsSite']),
+        leading: const CloseButton(),
+        titleSpacing: 0,
+        toolbarHeight: 64,
+        title: Row(children: [
+          if (!narrow) ...[
+            TintIcon(widget.loginMode ? Icons.login_rounded : Icons.public_rounded, color: cs.primary, size: 38),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text(widget.loginMode ? s['signIn'] : s['lmsSite'],
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              if (host.isNotEmpty)
+                Row(children: [
+                  Icon(secure ? Icons.lock_rounded : Icons.lock_open_rounded,
+                      size: 12, color: secure ? Brand.success : cs.outline),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(host,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
+                  ),
+                ]),
+            ]),
+          ),
+        ]),
         actions: [
           if (!widget.loginMode) ...[
-            IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => _c?.goBack()),
-            IconButton(icon: const Icon(Icons.arrow_forward), onPressed: () => _c?.goForward()),
+            HeaderButton(icon: Icons.arrow_back_rounded, tooltip: s['wlBack'], onPressed: () => _c?.goBack()),
+            HeaderButton(icon: Icons.arrow_forward_rounded, tooltip: s['wlForward'], onPressed: () => _c?.goForward()),
           ],
-          IconButton(icon: const Icon(Icons.refresh), tooltip: s['refresh'], onPressed: () => _c?.reload()),
+          HeaderButton(icon: Icons.refresh_rounded, tooltip: s['refresh'], onPressed: () => _c?.reload()),
+          const SizedBox(width: 6),
         ],
-        bottom: _progress < 1
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(3),
-                child: LinearProgressIndicator(value: _progress == 0 ? null : _progress, minHeight: 3),
-              )
-            : null,
+        // Always 3 px high so the page doesn't jump when loading starts or ends.
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(3),
+          child: _progress < 1
+              ? LinearProgressIndicator(
+                  value: _progress == 0 ? null : _progress,
+                  minHeight: 3,
+                  color: cs.primary,
+                  backgroundColor: cs.primary.withValues(alpha: 0.12),
+                )
+              : const SizedBox(height: 3),
+        ),
       ),
       body: Column(
         children: [
@@ -187,8 +239,10 @@ class _LmsWebPageState extends State<LmsWebPage> {
                 );
               },
               onProgressChanged: (c, p) => setState(() => _progress = p / 100),
+              onLoadStart: (c, url) => _showUrl(url),
               onLoadStop: _onLoadStop,
               onUpdateVisitedHistory: (c, url, _) {
+                _showUrl(url);
                 if (_isLmsLoggedInPage(url)) _captureSession(c);
               },
               onDownloadStarting: _onDownload,
@@ -209,27 +263,52 @@ class _LoginOptionsState extends State<_LoginOptions> {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final cs = Theme.of(context).colorScheme;
     final app = context.read<AppState>();
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(s['loginHint'], style: Theme.of(context).textTheme.bodySmall),
-            CheckboxListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 4, 2),
+      decoration: BoxDecoration(
+        color: cs.primary.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(radiusM),
+        border: Border.all(color: cs.primary.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Icon(Icons.info_outline_rounded, size: 18, color: cs.primary),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(s['loginHint'],
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurface, height: 1.35)),
+              ),
+            ),
+          ]),
+          Row(children: [
+            Icon(Icons.password_rounded, size: 18, color: cs.onSurfaceVariant),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(s['rememberPassword'],
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+            ),
+            Switch(
               value: app.settings.rememberPassword,
-              title: Text(s['rememberPassword']),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               onChanged: (v) {
-                setState(() => app.settings.rememberPassword = v ?? true);
-                if (v == false) Secrets.deleteLms();
+                setState(() => app.settings.rememberPassword = v);
+                if (!v) Secrets.deleteLms();
               },
             ),
-          ],
-        ),
+          ]),
+        ],
       ),
     );
   }

@@ -1,6 +1,9 @@
 // Texts for the today area (en / uz Latin / ru). Merged into S by strings.dart.
 const Map<String, Map<String, String>> todayStrings = {
   'en': {
+    'tdMinsLeft': 'min left',
+    'tdMinsTo': 'min to go',
+    'tdHoursTo': 'h to go',
     'tdOpenTasks': 'Open tasks',
     'tdNbHours': 'Absence hours',
     'tdGpa': 'GPA',
@@ -19,6 +22,9 @@ const Map<String, Map<String, String>> todayStrings = {
     'tdHello': 'Hello',
   },
   'uz': {
+    'tdMinsLeft': 'daq qoldi',
+    'tdMinsTo': 'daq keyin',
+    'tdHoursTo': 'soatdan keyin',
     'tdOpenTasks': 'Ochiq topshiriqlar',
     'tdNbHours': 'NB soatlari',
     'tdGpa': 'GPA',
@@ -37,6 +43,9 @@ const Map<String, Map<String, String>> todayStrings = {
     'tdHello': 'Salom',
   },
   'ru': {
+    'tdMinsLeft': 'мин осталось',
+    'tdMinsTo': 'мин до начала',
+    'tdHoursTo': 'ч до начала',
     'tdOpenTasks': 'Открытые задания',
     'tdNbHours': 'Часы пропусков',
     'tdGpa': 'GPA',

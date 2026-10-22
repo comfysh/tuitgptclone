@@ -73,6 +73,7 @@ class _HomeShellState extends State<HomeShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_app.loggedIn) {
         _app.configureBackground();
+        _app.refreshWidget(); // cached data first, in case the sync fails
         _app.refresh();
       }
     });
@@ -169,7 +170,12 @@ class _HomeShellState extends State<HomeShell> {
             NavigationDestination(
               icon: Icon(destInfo[d]!.icon),
               selectedIcon: Icon(destInfo[d]!.selectedIcon),
-              label: d == Dest.assistant ? s['assistantShort'] : _label(d, s),
+              label: switch (d) {
+                Dest.assistant => s['assistantShort'],
+                Dest.schedule => s['scheduleShort'],
+                Dest.deadlines => s['tasksShort'],
+                _ => _label(d, s),
+              },
             ),
           NavigationDestination(icon: const Icon(Icons.grid_view_rounded), label: s['more']),
         ],

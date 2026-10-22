@@ -109,7 +109,8 @@ ThemeData buildAppTheme(Brightness b) {
       showCheckmark: false,
       side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.6)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusS)),
-      labelStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
+      labelStyle: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600, color: scheme.onSurface),
+      secondaryLabelStyle: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600, color: scheme.onSurface),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
@@ -333,7 +334,7 @@ class StatTile extends StatelessWidget {
       onTap: onTap,
       padding: const EdgeInsets.all(14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [TintIcon(icon, color: color, size: 34), const Spacer(), if (trailing != null) trailing!]),
+        Row(children: [TintIcon(icon, color: color, size: 34), const Spacer(), ?trailing]),
         const SizedBox(height: 12),
         Text(value,
             maxLines: 1,

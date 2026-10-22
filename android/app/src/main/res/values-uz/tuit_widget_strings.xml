@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tuit_widget_label">TuitMate · Bugun</string>
+    <string name="tuit_widget_description">Joriy yoki keyingi dars, topshiriqlar va NB soatlari bir qarashda.</string>
+
+    <string name="tuit_widget_preview_date">Bugun</string>
+    <string name="tuit_widget_preview_badge">Hozir · 10:00–11:20</string>
+    <string name="tuit_widget_preview_title">Operatsion tizimlar</string>
+    <string name="tuit_widget_preview_subtitle">B-204 · Ma\'ruza</string>
+    <string name="tuit_widget_preview_due_title">Laboratoriya 3 · Kompyuter tarmoqlari</string>
+    <string name="tuit_widget_preview_due_when">ertaga, 23:59</string>
+    <string name="tuit_widget_preview_classes_label">bugungi dars</string>
+    <string name="tuit_widget_preview_tasks_label">topshiriqlar</string>
+    <string name="tuit_widget_preview_nb_label">NB soatlari</string>
+</resources>

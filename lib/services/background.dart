@@ -9,6 +9,7 @@ import '../core/settings.dart';
 import '../core/storage.dart';
 import '../lms/lms_client.dart';
 import '../lms/snapshot.dart';
+import 'home_widget_service.dart';
 import 'notifier.dart';
 
 const _taskName = 'lms-check';
@@ -38,6 +39,7 @@ Future<void> runLmsCheck() async {
   try {
     final now = await fetchSnapshot(client, previous: prev, semesterId: settings.semesterId, full: false);
     await storage.saveSnapshot(now);
+    await HomeWidgetService.update(now, settings); // never throws
     try {
       await Notifier.processChanges(prev, now, settings, storage);
     } catch (_) {}

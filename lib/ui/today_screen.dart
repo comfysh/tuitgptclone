@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../core/format.dart';
+import '../core/insights.dart';
 import '../core/strings.dart';
 import '../core/timetable.dart';
 import '../lms/changes.dart';
@@ -51,15 +52,11 @@ class _TodayScreenState extends State<TodayScreen> {
     final current = currentOrNext(today, now);
     final nav = context.read<NavController>();
 
-    final open = snap.assignments
-        .where((a) => !a.isSubmitted && !a.isGraded && a.deadline != null && a.deadline!.isAfter(now))
-        .toList()
-        .sortedByDeadline();
+    final open = snap.assignments.where(isOpenTask).toList().sortedByDeadline();
     final att = AttendanceSummary.from(snap, app.settings);
-    final ratings = [
-      for (final p in snap.coursePages.values)
-        if (p.rating.ratingPercent != null && (p.rating.max ?? 0) > 0) p.rating.ratingPercent!,
-    ];
+    // Same rule as the Courses screen: the LMS percentage, or achieved / max.
+    final ratings = [for (final p in snap.coursePages.values) ?_ratingPercent(p.rating)];
+    final gpa = snap.planSummary?.gpa ?? estimatedGpa(snap.studyPlan);
     final avgRating = ratings.isEmpty ? null : ratings.reduce((a, b) => a + b) / ratings.length;
     final nextExam = (snap.finals.where((f) => f.startsAt != null && f.startsAt!.isAfter(now)).toList()
           ..sort((a, b) => a.startsAt!.compareTo(b.startsAt!)))
@@ -83,10 +80,10 @@ class _TodayScreenState extends State<TodayScreen> {
       ),
       StatTile(
         icon: Icons.workspace_premium_rounded,
-        value: snap.planSummary?.gpa?.toStringAsFixed(2) ?? '—',
+        value: gpa?.toStringAsFixed(2) ?? '—',
         label: s['tdGpa'],
         color: Brand.success,
-        onTap: () => nav.go(Dest.courses),
+        onTap: () => nav.go(Dest.grades),
       ),
       StatTile(
         icon: Icons.insights_rounded,
@@ -353,9 +350,10 @@ class _Hero extends StatelessWidget {
             size: 86,
             stroke: 8,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(mins >= 120 ? '${(mins / 60).floor()}h' : '$mins',
+              Text(mins >= 120 ? '${(mins / 60).round()}' : '$mins',
                   style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
-              Text(isNow ? s['tdLeft'] : (mins >= 120 ? s['tdIn'] : '${s['tdMinLeft']} ${s['tdIn']}'),
+              Text(isNow ? s['tdMinsLeft'] : s[mins >= 120 ? 'tdHoursTo' : 'tdMinsTo'],
+                  textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 11, color: white70, fontWeight: FontWeight.w600)),
             ]),
           ),
@@ -363,6 +361,12 @@ class _Hero extends StatelessWidget {
       ]),
     );
   }
+}
+
+double? _ratingPercent(CourseRating r) {
+  final max = r.max ?? 0, a = r.achieved;
+  if (max <= 0) return null;
+  return r.ratingPercent ?? (a == null ? null : a / max * 100);
 }
 
 class _HeroMeta extends StatelessWidget {

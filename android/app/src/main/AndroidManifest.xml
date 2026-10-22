@@ -42,6 +42,18 @@
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
             </intent-filter>
         </receiver>
+        <!-- Home-screen widget "TuitMate · Today" (data from lib/services/home_widget_service.dart) -->
+        <receiver
+            android:name=".TuitWidgetProvider"
+            android:exported="false"
+            android:label="@string/tuit_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tuit_widget_info" />
+        </receiver>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

@@ -88,7 +88,8 @@ GradeForecast forecastFor(CoursePage page) {
     max += m;
     if (a.isGraded) {
       achieved += a.grade!;
-    } else {
+    } else if (!a.isOverdue || a.midterm) {
+      // Missed tasks can't earn points any more; midterms are graded in class.
       open += m;
     }
   }
@@ -96,6 +97,44 @@ GradeForecast forecastFor(CoursePage page) {
   final r = page.rating;
   return GradeForecast(r.achieved ?? achieved, (r.max != null && r.max! > 0) ? r.max! : max, open);
 }
+
+/// How the work so far went, without counting tasks that are still open.
+///
+/// The LMS rating divides by every published task, so early in the semester
+/// it reads 10–30 % (and grade 2) only because most tasks aren't due yet.
+/// Here only graded tasks and missed ones (deadline passed, no answer) count.
+class Standing {
+  final double earned;
+  final double counted; // max points of the graded + missed tasks
+  const Standing(this.earned, this.counted);
+
+  double? get percent => counted > 0 ? (earned / counted * 100).clamp(0, 100).toDouble() : null;
+
+  /// The grade the course is heading for, or null before anything is graded.
+  int? get grade {
+    final p = percent;
+    return p == null ? null : gradeForPercent(p);
+  }
+}
+
+Standing standingFor(CoursePage? page) {
+  var earned = 0.0, counted = 0.0;
+  for (final a in page?.assignments ?? const <Assignment>[]) {
+    final m = a.maxGrade;
+    if (m == null || m <= 0) continue;
+    if (a.isGraded) {
+      earned += a.grade!;
+      counted += m;
+    } else if (a.isOverdue && !a.midterm) {
+      counted += m;
+    }
+  }
+  return Standing(earned, counted);
+}
+
+/// A task still to do: no answer yet, not graded, deadline not passed.
+/// The one rule for "open tasks" on every screen and the home-screen widget.
+bool isOpenTask(Assignment a) => !a.isSubmitted && !a.isGraded && !a.isOverdue;
 
 // ---------------------------------------------------------------- attendance x lessons
 
