@@ -12,6 +12,7 @@ import '../core/strings.dart';
 import '../core/timetable.dart';
 import '../lms/changes.dart';
 import '../lms/snapshot.dart';
+import 'inbox.dart';
 
 /// Local notifications on Android and Windows.
 class Notifier {
@@ -52,10 +53,41 @@ class Notifier {
     priority: Priority.defaultPriority,
   );
 
+  /// Where a tapped notification leads: 'inbox' (updates) or 'deadlines'
+  /// (deadline reminders). Set by the app; taps that arrive before it is set,
+  /// or that launched the app, wait in [pendingTap].
+  static void Function(String route)? onTap;
+  static String? pendingTap;
+
+  static void _tapped(NotificationResponse r) {
+    final route = r.payload;
+    if (route == null || route.isEmpty) return;
+    final handler = onTap;
+    if (handler != null) {
+      handler(route);
+    } else {
+      pendingTap = route;
+    }
+  }
+
+  /// The route of the notification that started the app, if one did.
+  static Future<String?> takeLaunchRoute() async {
+    final waiting = pendingTap;
+    pendingTap = null;
+    if (waiting != null) return waiting;
+    try {
+      await init();
+      final details = await _plugin.getNotificationAppLaunchDetails();
+      if (details?.didNotificationLaunchApp ?? false) return details?.notificationResponse?.payload;
+    } catch (_) {}
+    return null;
+  }
+
   static Future<void> init() async {
     if (_ready) return;
     tzdata.initializeTimeZones();
     await _plugin.initialize(
+      onDidReceiveNotificationResponse: _tapped,
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@drawable/ic_stat_notify'),
         windows: WindowsInitializationSettings(
@@ -83,7 +115,7 @@ class Notifier {
   static int _id(String key) => key.hashCode & 0x3fffffff;
 
   static Future<void> show(String key, String title, String body,
-      {bool reminder = false, bool quiet = false, List<String>? lines}) async {
+      {bool reminder = false, bool quiet = false, List<String>? lines, String? route}) async {
     await init();
     final base = quiet ? _quietChannel : (reminder ? _remindChannel : _channel);
     final android = lines == null
@@ -102,6 +134,7 @@ class Notifier {
       id: _id(key),
       title: title,
       body: lines == null ? body : '$body\n${lines.join('\n')}',
+      payload: route,
       notificationDetails: NotificationDetails(
         android: android,
         windows: quiet ? WindowsNotificationDetails(audio: WindowsNotificationAudio.silent()) : const WindowsNotificationDetails(),
@@ -147,6 +180,12 @@ class Notifier {
 
   static String _title(LmsChange c, S s) => '${_head(c.kind, s)} · ${c.subject}';
 
+  /// "New grade", "Deadline changed"… (also used by the Inbox).
+  static String headOf(ChangeKind kind, S s) => _head(kind, s);
+
+  /// The notification text of a change (also used by the Inbox).
+  static String textOf(LmsChange c, S s) => _text(c, s);
+
   static String _head(ChangeKind kind, S s) {
     final head = switch (kind) {
       ChangeKind.newAssignment => {'en': 'New assignment', 'uz': 'Yangi topshiriq', 'ru': 'Новое задание'},
@@ -177,6 +216,9 @@ class Notifier {
     for (final c in changes) {
       if (c.kind == ChangeKind.reminder) sent.add(c.key);
     }
+    // The Inbox keeps every change, also muted ones and with notifications off.
+    await Inbox.seed(now, storage);
+    await Inbox.record(changes, storage);
     if (settings.notifications) {
       try {
         await _notify(changes, settings);
@@ -207,11 +249,11 @@ class Notifier {
     final reminders = [for (final c in visible) if (c.kind == ChangeKind.reminder) c];
     final updates = [for (final c in visible) if (c.kind != ChangeKind.reminder) c];
     for (final c in reminders.take(6)) {
-      await show(c.key, _title(c, s), _text(c, s), reminder: true, quiet: quiet);
+      await show(c.key, _title(c, s), _text(c, s), reminder: true, quiet: quiet, route: 'deadlines');
     }
     if (updates.length <= 2) {
       for (final c in updates) {
-        await show(c.key, _title(c, s), _text(c, s), quiet: quiet);
+        await show(c.key, _title(c, s), _text(c, s), quiet: quiet, route: 'inbox');
       }
       return;
     }
@@ -224,7 +266,7 @@ class Notifier {
     final lines = [for (final c in updates.take(8)) '${_title(c, s)}: ${_text(c, s)}'];
     if (updates.length > 8) lines.add(s.f('nfMore', {'n': updates.length - 8}));
     await show('bundle|${DateTime.now().millisecondsSinceEpoch}', s.f('nfBundleTitle', {'n': updates.length}), summary,
-        quiet: quiet, lines: lines);
+        quiet: quiet, lines: lines, route: 'inbox');
   }
 
   static Future<void> notifySessionExpired(Settings settings, AppStorage storage) async {

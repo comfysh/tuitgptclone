@@ -14,6 +14,7 @@ import 'services/automation.dart';
 import 'services/background.dart';
 import 'services/background_login.dart';
 import 'services/home_widget_service.dart';
+import 'services/inbox.dart';
 import 'services/notifier.dart';
 import 'services/web_env.dart';
 
@@ -29,6 +30,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   final LmsClient client;
   LmsSnapshot snapshot;
   bool loggedIn;
+
+  /// What changed in LMS, newest first (the Inbox).
+  List<InboxItem> inbox = const [];
+  int get unread => inbox.where((i) => !i.read).length;
 
   bool syncing = false;
   bool sessionExpired = false;
@@ -57,7 +62,30 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final client = LmsClient(storage.cookieDir);
     final snap = await storage.loadSnapshot() ?? LmsSnapshot();
     final loggedIn = await client.hasSession();
-    return AppState(settings, storage, client, snap, loggedIn);
+    return AppState(settings, storage, client, snap, loggedIn)..inbox = loggedIn ? await Inbox.load(storage) : const [];
+  }
+
+  /// Marks Inbox items read ([ids] null: every item shown now, not ones the
+  /// background check added since). The screen updates at once.
+  Future<void> markInboxRead({Set<String>? ids}) async {
+    final target = ids ?? {for (final i in inbox) if (!i.read) i.id};
+    if (!inbox.any((i) => !i.read && target.contains(i.id))) return;
+    inbox = [for (final i in inbox) target.contains(i.id) ? i.copyWith(read: true) : i];
+    notifyListeners();
+    final saved = await Inbox.markRead(storage, ids: target);
+    if (saved.isNotEmpty && loggedIn) {
+      inbox = saved; // also picks up what the background check added
+      notifyListeners();
+    }
+  }
+
+  /// Picks up what the Android background check added.
+  Future<bool> _reloadInbox() async {
+    if (!loggedIn) return false;
+    final items = await Inbox.load(storage);
+    final changed = items.length != inbox.length || items.indexed.any((e) => e.$2.id != inbox[e.$1].id || e.$2.read != inbox[e.$1].read);
+    if (changed) inbox = items;
+    return changed;
   }
 
   String get language => settings.language;
@@ -108,7 +136,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _onResumed() async {
-    if (await _adoptDiskSnapshot()) notifyListeners();
+    final adopted = await _adoptDiskSnapshot();
+    if (await _reloadInbox() || adopted) notifyListeners();
     final age = DateTime.now().difference(snapshot.updatedAt ?? DateTime(2000));
     if (age > const Duration(minutes: 10)) await refresh(full: false, silent: true);
   }
@@ -177,6 +206,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       try {
         changes = await Notifier.processChanges(base.isEmpty ? null : base, fresh, settings, storage);
       } catch (_) {}
+      if (loggedIn && client.epoch == epoch) await _reloadInbox();
       if (loggedIn && client.epoch == epoch) {
         unawaited(HomeWidgetService.update(fresh, settings));
         unawaited(Automation.deliver(changes: changes, snap: fresh, settings: settings, storage: storage));
@@ -266,6 +296,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     loggedIn = false; // stops new syncs; a running one discards its result
     _refreshAgain = false;
     snapshot = LmsSnapshot();
+    inbox = const [];
     sessionExpired = false;
     lastError = null;
     try {
@@ -290,6 +321,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       // A sync started before sign-out may still be finishing; wipe again after it.
       await running;
       snapshot = LmsSnapshot();
+      inbox = const [];
       try {
         await Notifier.cancelAll();
       } catch (_) {}

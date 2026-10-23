@@ -20,6 +20,7 @@ import 'files.dart';
 import 'lms_web_page.dart';
 import 'nav.dart';
 import 'widgets.dart';
+import 'workload.dart';
 
 /// Where a task stands (the four summary tiles).
 enum _Status { todo, overdue, submitted, graded }
@@ -235,6 +236,7 @@ class _DeadlinesScreenState extends State<DeadlinesScreen> {
                 icon: Icons.task_alt_rounded, title: s['dlEmpty'], subtitle: s['dlEmptySub'], color: Brand.success),
           )
         else ...[
+          const WorkloadCard(),
           _SummaryRow(
             counts: counts,
             selected: _filter,

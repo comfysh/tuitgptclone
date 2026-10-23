@@ -100,6 +100,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) setState(() => _pending.add(att));
     }
     _focus.requestFocus();
+    if (launch.send && mounted) unawaited(_send());
   }
 
   void _newChat() {

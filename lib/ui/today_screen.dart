@@ -12,6 +12,7 @@ import '../core/timetable.dart';
 import '../lms/changes.dart';
 import '../lms/models.dart';
 import 'cards.dart' show deadlineLabel;
+import 'inbox_screen.dart' show InboxRow;
 import 'courses_screen.dart';
 import 'deadlines_screen.dart';
 import 'nav.dart';
@@ -82,6 +83,7 @@ class _TodayScreenState extends State<TodayScreen> {
       },
     );
     final week = _DueWeek(tasks: dueWeek.take(6).toList(), total: dueWeek.length, now: now);
+    final fresh = [for (final i in app.inbox) if (!i.read) i];
     final numbers = _Numbers(open: open.length);
 
     return Scaffold(
@@ -102,6 +104,19 @@ class _TodayScreenState extends State<TodayScreen> {
                   _Tomorrow(slots: tomorrow),
                 ];
                 final right = <Widget>[
+                  if (fresh.isNotEmpty) ...[
+                    // Unread updates from the Inbox, newest first.
+                    SectionHeader(s['tdWhatsNew'], action: s.f('ibNew', {'n': fresh.length}), onAction: () => nav.go(Dest.inbox)),
+                    AppCard(
+                      padding: EdgeInsets.zero,
+                      child: Column(children: [
+                        for (final (i, item) in fresh.take(3).indexed) ...[
+                          if (i > 0) Divider(height: 1, indent: 64, color: Theme.of(context).colorScheme.outlineVariant),
+                          InboxRow(item: item, showDay: true),
+                        ],
+                      ]),
+                    ),
+                  ],
                   SectionHeader(s['tdDueNext'], action: s['all'], onAction: () => nav.go(Dest.deadlines)),
                   week,
                   const SizedBox(height: 12),

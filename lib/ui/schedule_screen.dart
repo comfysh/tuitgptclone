@@ -17,7 +17,6 @@ import '../lms/parsers.dart' show lessonTypeOfName;
 import '../lms/snapshot.dart';
 import 'cards.dart' show ClassCard, DayTimeline;
 import 'courses_screen.dart' show CourseDetailPage;
-import 'lms_web_page.dart' show LmsWebPage;
 import 'widgets.dart';
 
 class ScheduleScreen extends StatefulWidget {
@@ -205,7 +204,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
 
     return Scaffold(
+      appBar: pageAppBar(context, title: s['schedule'], lmsPath: '/student/schedule'),
       body: SafeArea(
+        top: false,
         bottom: false,
         child: RefreshIndicator(
           onRefresh: () => app.refresh(),
@@ -314,7 +315,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 }
 
                 return ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
                   physics: const AlwaysScrollableScrollPhysics(),
                   children: [
                     header,
@@ -434,11 +435,9 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
     final s = S.of(context);
     final cs = Theme.of(context).colorScheme;
-    final title = Text(s['schedule'],
-        maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.headlineSmall);
+    // The page title, LMS and refresh buttons are in the app bar (pageAppBar).
     final subtitle = Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
       Text([?relative, range].join(' · '),
           maxLines: 2,
@@ -446,40 +445,12 @@ class _Header extends StatelessWidget {
           style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
       if (showParity) _ParityChip(side: side, onTap: onParity),
     ]);
-    final nav = [
+    return Row(children: [
+      Expanded(child: subtitle),
       HeaderButton(icon: Icons.chevron_left_rounded, tooltip: s['scPrevWeek'], onPressed: onPrev),
       HeaderButton(icon: Icons.today_rounded, tooltip: s['today'], onPressed: onToday),
       HeaderButton(icon: Icons.chevron_right_rounded, tooltip: s['nextWeek'], onPressed: onNext),
-    ];
-    final tools = [
-      HeaderButton(
-        icon: Icons.open_in_new_rounded,
-        tooltip: s['openInLms'],
-        onPressed: () => LmsWebPage.open(context, '/student/schedule'),
-      ),
-      HeaderButton(icon: Icons.refresh_rounded, tooltip: s['refresh'], busy: app.syncing, onPressed: () => app.refresh()),
-    ];
-    return LayoutBuilder(builder: (context, c) {
-      if (c.maxWidth >= 620) {
-        return Row(children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              title,
-              const SizedBox(height: 4),
-              subtitle,
-            ]),
-          ),
-          ...nav,
-          const SizedBox(width: 10),
-          ...tools,
-        ]);
-      }
-      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [Expanded(child: title), ...tools]),
-        const SizedBox(height: 6),
-        Row(children: [Expanded(child: subtitle), ...nav]),
-      ]);
-    });
+    ]);
   }
 }
 

@@ -4,6 +4,30 @@ All notable changes to TuitMate. The release notes on GitHub are taken from this
 add a section `## [x.y.z] - date` and raise `version:` in `pubspec.yaml` (and `lib/core/version.dart`)
 to publish a new release.
 
+## [1.2.0] - 2026-10-23
+
+A new way around the app: four places built around what you want to do, not the LMS menu, and one
+box to search everything or ask the AI.
+
+### Highlights
+- **New navigation**: **Today**, **Plan** (schedule, deadlines, exams), **Inbox** (updates, news) and
+  **Study** (courses, grades, attendance, files). Each place has its sections as tabs under the title
+  and opens where you left it. On phones the **Ask** button sits in the middle of the bottom bar; on PC
+  the sidebar has an Ask box, the class on now (or the next one, or the nearest deadline) and the AI
+  chat, LMS website and profile at the bottom.
+- **Ask** (Ctrl+K on PC): one box that finds tasks, courses, teacher files, exams, news and pages as
+  you type, and sends anything else to the AI together with your timetable, tasks and grades. Ready-made
+  questions when the box is empty. Works with the keyboard (↑↓, Enter, Esc).
+- **Inbox**: every change TuitMate finds (new tasks, changed deadlines, grades, NB, exam changes and
+  results, teacher files, LMS news) in one list grouped by day, with unread marks, filters and
+  "mark all as read". Tap an update to open the task, file or article. It also fills while the app is
+  closed (Android background checks), and muted kinds still appear here.
+- **What's new** on Today: your latest unread updates.
+- **Workload by week** (Plan › Deadlines): open tasks and exams in each of the next 8 weeks, with the
+  busiest week named, so you can start early.
+- Tapping a notification opens the Inbox (deadline reminders open your tasks); on Windows it also
+  brings the window out of the tray.
+
 ## [1.1.0] - 2026-10-23
 
 A new look of its own, quieter notifications that work without opening the app, more AI providers,

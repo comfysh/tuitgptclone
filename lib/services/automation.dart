@@ -239,12 +239,7 @@ class Automation {
 
   /// Events for the changes of one sync, with the full objects from [snap].
   static List<AutomationEvent> eventsFor(List<LmsChange> changes, LmsSnapshot snap, Settings settings) {
-    Assignment? task(String key) {
-      for (final a in snap.assignments) {
-        if (a.key == key || key.startsWith('${a.key}|')) return a;
-      }
-      return null;
-    }
+    Assignment? task(String key) => taskForChange(snap, key);
 
     final out = <AutomationEvent>[];
     for (final c in changes) {

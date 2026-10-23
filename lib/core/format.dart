@@ -16,6 +16,7 @@ String fmtDate(DateTime d, String lang) => DateFormat('d MMM', _locale(lang)).fo
 String fmtDateFull(DateTime d, String lang) => DateFormat('d MMM yyyy', _locale(lang)).format(d);
 String fmtTime(DateTime d) => DateFormat('HH:mm').format(d);
 String fmtDateTime(DateTime d, String lang) => '${fmtDate(d, lang)}, ${fmtTime(d)}';
+String fmtMonthShort(DateTime d, String lang) => DateFormat('MMM', _locale(lang)).format(d);
 String fmtWeekday(DateTime d, String lang) => DateFormat('EEEE', _locale(lang)).format(d);
 
 /// "2d 4h", "3h 10m", "25m".

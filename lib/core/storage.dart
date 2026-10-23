@@ -33,6 +33,9 @@ class AppStorage {
   File get notifyStateFile => File(_p('notify_state.json'));
   File get chatsFile => File(_p('chats.json'));
 
+  /// Everything that changed in LMS, for the Inbox (lib/services/inbox.dart).
+  File get inboxFile => File(_p('inbox.json'));
+
   /// Webhook delivery state and the queue of events not delivered yet (automation).
   File get automationFile => File(_p('automation.json'));
   Directory get chatFilesDir => Directory(_p('chat_files'));
@@ -89,7 +92,7 @@ class AppStorage {
 
   /// Removes everything tied to the signed-in account.
   Future<void> clearAll() async {
-    for (final f in [snapshotFile, notifyStateFile, chatsFile, automationFile]) {
+    for (final f in [snapshotFile, notifyStateFile, chatsFile, automationFile, inboxFile]) {
       try {
         if (await f.exists()) await f.delete();
       } catch (_) {}

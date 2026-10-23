@@ -11,7 +11,11 @@ class ChatLaunch {
   final String prompt;
   final String? fileName;
   final Uint8List? bytes;
-  const ChatLaunch(this.prompt, {this.fileName, this.bytes});
+
+  /// Send the prompt right away (asked from the Ask palette) instead of
+  /// leaving it in the box to edit.
+  final bool send;
+  const ChatLaunch(this.prompt, {this.fileName, this.bytes, this.send = false});
 }
 
 class ChatAttachment {

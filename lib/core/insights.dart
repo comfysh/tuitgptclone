@@ -136,6 +136,48 @@ Standing standingFor(CoursePage? page) {
 /// The one rule for "open tasks" on every screen and the home-screen widget.
 bool isOpenTask(Assignment a) => !a.isSubmitted && !a.isGraded && !a.isOverdue;
 
+// ---------------------------------------------------------------- workload
+
+/// One week of the workload view: open tasks due and exams in that week.
+class WeekLoad {
+  final DateTime monday;
+  final int tasks;
+  final int exams;
+  const WeekLoad(this.monday, this.tasks, this.exams);
+
+  /// How heavy the week is: an exam counts as much as three tasks.
+  int get weight => tasks + exams * 3;
+}
+
+/// The current week and the [weeks] - 1 after it. In the current week only
+/// what is still ahead of [now] counts.
+List<WeekLoad> workload(LmsSnapshot snap, DateTime now, {int weeks = 8}) {
+  final today = DateTime(now.year, now.month, now.day);
+  final monday = DateTime(today.year, today.month, today.day - (today.weekday - 1));
+  bool inWeek(DateTime? t, DateTime start, DateTime end) => t != null && !t.isBefore(start) && t.isBefore(end) && t.isAfter(now);
+  return [
+    for (var w = 0; w < weeks; w++)
+      () {
+        final start = DateTime(monday.year, monday.month, monday.day + 7 * w);
+        final end = DateTime(monday.year, monday.month, monday.day + 7 * (w + 1));
+        return WeekLoad(
+          start,
+          snap.assignments.where((a) => isOpenTask(a) && inWeek(a.deadline, start, end)).length,
+          snap.finals.where((f) => inWeek(f.startsAt, start, end)).length,
+        );
+      }(),
+  ];
+}
+
+/// The heaviest week, or null when nothing is due.
+WeekLoad? busiestWeek(List<WeekLoad> weeks) {
+  WeekLoad? best;
+  for (final w in weeks) {
+    if (w.weight > 0 && (best == null || w.weight > best.weight)) best = w;
+  }
+  return best;
+}
+
 // ---------------------------------------------------------------- attendance x lessons
 
 /// Absences of [course] keyed by "type|themeNumber", to mark lessons you missed.

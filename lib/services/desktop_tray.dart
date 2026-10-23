@@ -113,6 +113,9 @@ class DesktopTray with TrayListener, WindowListener {
     if (_app.language != _menuLang) unawaited(_buildMenu());
   }
 
+  /// Shows the window if it is hidden in the tray (a tapped notification).
+  static Future<void> bringToFront() async => _instance?._show();
+
   Future<void> _show() async {
     if (!_windowReady) return;
     try {

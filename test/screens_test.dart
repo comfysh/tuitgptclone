@@ -10,13 +10,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tuitmate/ai/chat_models.dart';
 import 'package:tuitmate/app_state.dart';
 import 'package:tuitmate/core/format.dart';
 import 'package:tuitmate/core/settings.dart';
 import 'package:tuitmate/core/storage.dart';
+import 'package:tuitmate/core/strings.dart';
 import 'package:tuitmate/lms/lms_client.dart';
 import 'package:tuitmate/lms/models.dart';
 import 'package:tuitmate/lms/snapshot.dart';
+import 'package:tuitmate/lms/changes.dart';
+import 'package:tuitmate/services/inbox.dart';
+import 'package:tuitmate/ui/ask_palette.dart';
 import 'package:tuitmate/ui/attendance_screen.dart';
 import 'package:tuitmate/ui/automation_page.dart';
 import 'package:tuitmate/ui/chat_screen.dart';
@@ -26,12 +31,14 @@ import 'package:tuitmate/ui/exams_screen.dart';
 import 'package:tuitmate/ui/files_screen.dart';
 import 'package:tuitmate/ui/grades_screen.dart';
 import 'package:tuitmate/ui/home_shell.dart';
+import 'package:tuitmate/ui/inbox_screen.dart';
 import 'package:tuitmate/ui/nav.dart';
 import 'package:tuitmate/ui/news_screen.dart';
 import 'package:tuitmate/ui/schedule_screen.dart';
 import 'package:tuitmate/ui/settings_screen.dart';
 import 'package:tuitmate/ui/today_screen.dart';
 import 'package:tuitmate/ui/welcome_screen.dart';
+import 'package:tuitmate/ui/widgets.dart' show HubTabs;
 
 LmsSnapshot sampleSnapshot(DateTime now) {
   final monday = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
@@ -122,6 +129,20 @@ LmsSnapshot sampleSnapshot(DateTime now) {
   );
 }
 
+/// Updates as a few syncs would have recorded them (two unread).
+List<InboxItem> sampleInbox(LmsSnapshot snap, DateTime now) {
+  final lab = snap.coursePages[1]!.assignments.first;
+  final graded = snap.coursePages[1]!.assignments.last;
+  final news = snap.news.first;
+  return [
+    InboxItem(kind: ChangeKind.newAssignment, key: lab.key, subject: lab.courseName, detail: lab.title, when: lab.deadline, at: now.subtract(const Duration(minutes: 40))),
+    InboxItem(kind: ChangeKind.gradePosted, key: graded.key, subject: graded.courseName, detail: graded.title, value: 9, max: 10, at: now.subtract(const Duration(hours: 3))),
+    InboxItem(kind: ChangeKind.newFile, key: 'file|https://dl.tuit.uz/f/2.pdf', subject: snap.courses.first.subject, detail: 'Saralash.pdf', at: now.subtract(const Duration(days: 1, hours: 2)), read: true),
+    InboxItem(kind: ChangeKind.newAbsence, key: snap.absences.last.key, subject: snap.absences.last.subject, detail: 'Laboratoriya', when: snap.absences.last.date, at: now.subtract(const Duration(days: 4)), read: true),
+    InboxItem(kind: ChangeKind.news, key: news.key, subject: news.title, detail: news.body ?? '', when: news.date, at: now.subtract(const Duration(days: 1)), read: true),
+  ];
+}
+
 Future<void> _loadFonts() async {
   final sdk = '${Platform.environment['FLUTTER_ROOT'] ?? '/root/sdk/flutter'}/bin/cache/artifacts/material_fonts';
   Future<void> load(String family, List<String> files) async {
@@ -156,20 +177,29 @@ void main() {
     final storage = AppStorage.useDirectory(tmp);
     final settings = await Settings.load();
     app = AppState(settings, storage, LmsClient('${tmp.path}/cookies/'), sampleSnapshot(DateTime.now()), false);
+    await storage.writeJson(storage.inboxFile, {
+      'v': 1,
+      'items': [for (final i in sampleInbox(app.snapshot, DateTime.now())) i.toJson()],
+    });
+    app.inbox = await Inbox.load(storage);
   });
+
+  // Pages of a hub are shown inside it, as in the app (hub name and section tabs).
+  Widget inHub(Dest d, Widget page) => HubSection(dest: d, child: page);
 
   final screens = <String, Widget Function()>{
     'today': () => const TodayScreen(),
-    'schedule': () => const ScheduleScreen(),
-    'deadlines': () => const DeadlinesScreen(),
-    'courses': () => const CoursesScreen(),
-    'attendance': () => const AttendanceScreen(),
-    'exams': () => const ExamsScreen(),
+    'schedule': () => inHub(Dest.schedule, const ScheduleScreen()),
+    'deadlines': () => inHub(Dest.deadlines, const DeadlinesScreen()),
+    'courses': () => inHub(Dest.courses, const CoursesScreen()),
+    'attendance': () => inHub(Dest.attendance, const AttendanceScreen()),
+    'exams': () => inHub(Dest.exams, const ExamsScreen()),
+    'inbox': () => inHub(Dest.inbox, const InboxScreen()),
     'course_detail': () => CourseDetailPage(course: app.snapshot.courses.first),
     'task_sheet': () => _AutoOpen((ctx) => showAssignmentSheet(ctx, app.snapshot.coursePages[1]!.assignments.last)),
-    'grades': () => const GradesScreen(),
-    'files': () => const FilesScreen(),
-    'news': () => const NewsScreen(),
+    'grades': () => inHub(Dest.grades, const GradesScreen()),
+    'files': () => inHub(Dest.files, const FilesScreen()),
+    'news': () => inHub(Dest.news, const NewsScreen()),
     'news_detail': () => NewsDetailPage(item: app.snapshot.news.first),
     'profile': () => const ProfileScreen(),
     'ai_settings': () => const AiSettingsPage(),
@@ -177,6 +207,10 @@ void main() {
     'assistant': () => const ChatScreen(),
     'welcome': () => const WelcomeScreen(),
     'shell': () => const HomeShell(),
+    'shell_plan': () => const _StartAt(Dest.deadlines, HomeShell()),
+    'shell_inbox': () => const _StartAt(Dest.inbox, HomeShell()),
+    'shell_study': () => const _StartAt(Dest.grades, HomeShell()),
+    'ask': () => _AutoOpen(AskPalette.open),
   };
 
   // Phone, small phone, PC; plus dark mode on a phone.
@@ -216,6 +250,110 @@ void main() {
       });
     }
   }
+
+  Future<NavController> pumpApp(WidgetTester tester, Widget home, {Size size = const Size(412, 900)}) async {
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final nav = NavController();
+    await tester.pumpWidget(MultiProvider(
+      providers: [ChangeNotifierProvider.value(value: app), ChangeNotifierProvider.value(value: nav)],
+      child: MaterialApp(theme: buildTheme(Brightness.light), home: home),
+    ));
+    await tester.pump(const Duration(milliseconds: 300));
+    return nav;
+  }
+
+  testWidgets('Ask finds a task by its words and opens it', (tester) async {
+    await pumpApp(tester, _AutoOpen(AskPalette.open));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.enterText(find.byType(TextField), 'binary lab');
+    await tester.pump();
+    final hit = find.text('Lab 3: Binary search tree');
+    expect(hit, findsOneWidget);
+    await tester.tap(hit);
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+    expect(find.byType(TextField), findsNothing); // the palette closed
+    expect(find.text('topshiriq.pdf'), findsWidgets); // the task sheet is open
+    await tester.pumpWidget(const SizedBox());
+    app.dispose();
+  });
+
+  testWidgets('Ask finds pages by their name in any language', (tester) async {
+    final nav = await pumpApp(tester, _AutoOpen(AskPalette.open));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.enterText(find.byType(TextField), 'profile'); // the app is in Uzbek
+    await tester.pump();
+    final hit = find.text(S('uz')['profile']);
+    expect(hit, findsOneWidget);
+    await tester.tap(hit);
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+    expect(nav.current, Dest.profile);
+    await tester.pumpWidget(const SizedBox());
+    app.dispose();
+  });
+
+  testWidgets('Ask sends anything else to the AI with the question', (tester) async {
+    final nav = await pumpApp(tester, _AutoOpen(AskPalette.open), size: const Size(1280, 800));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.enterText(find.byType(TextField), 'ertaga nima bor');
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.search); // Enter: the first line is "Ask AI"
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(nav.current, Dest.assistant);
+    final launch = nav.takePayload() as ChatLaunch;
+    expect(launch.prompt, 'ertaga nima bor');
+    expect(launch.send, isTrue);
+    await tester.pumpWidget(const SizedBox());
+    app.dispose();
+  });
+
+  testWidgets('Inbox: unread count, mark all read, tabs switch sections', (tester) async {
+    final nav = await pumpApp(tester, HubSection(dest: Dest.inbox, child: const InboxScreen()));
+    expect(app.unread, 2);
+    expect(find.text('Xabarlar'), findsOneWidget); // the hub's name as the title
+    await tester.tap(find.byTooltip(S('uz')['ibMarkAll']));
+    await tester.pump();
+    expect(app.unread, 0); // at once
+    // The file write: real I/O, continued by the test's clock.
+    for (var i = 0; i < 10; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+      await tester.pump();
+    }
+    final saved = (await tester.runAsync(() => Inbox.load(app.storage)))!;
+    expect(saved, hasLength(5));
+    expect(saved.every((i) => i.read), isTrue);
+    await tester.tap(find.descendant(of: find.byType(HubTabs), matching: find.text(S('uz')['news'])));
+    await tester.pump();
+    expect(nav.current, Dest.news);
+    await tester.pumpWidget(const SizedBox());
+    app.dispose();
+  });
+}
+
+/// Opens [child] (the home shell) on [dest] instead of Today.
+class _StartAt extends StatefulWidget {
+  const _StartAt(this.dest, this.child);
+  final Dest dest;
+  final Widget child;
+
+  @override
+  State<_StartAt> createState() => _StartAtState();
+}
+
+class _StartAtState extends State<_StartAt> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<NavController>().current = widget.dest; // before the first build: no notify needed
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Opens a sheet or dialog on top of an empty page after the first frame.

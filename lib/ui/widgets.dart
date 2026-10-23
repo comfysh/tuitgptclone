@@ -6,6 +6,7 @@ import '../core/format.dart';
 import '../core/strings.dart';
 import 'design.dart';
 import 'lms_web_page.dart';
+import 'nav.dart';
 
 export 'design.dart';
 
@@ -46,8 +47,130 @@ class HeaderButton extends StatelessWidget {
   }
 }
 
-/// Standard page: big title, refresh / open-in-LMS buttons, sync banner,
-/// pull-to-refresh and a centred column on wide screens.
+/// The header every page uses: title (or, for a section of a hub, the hub's
+/// name with the section tabs below), the page's own buttons, "open in LMS"
+/// and refresh.
+PreferredSizeWidget pageAppBar(
+  BuildContext context, {
+  required String title,
+  String? subtitle,
+  List<Widget> actions = const [],
+  String? lmsPath,
+  PreferredSizeWidget? bottom,
+}) {
+  final app = context.watch<AppState>();
+  final s = S.of(context);
+  final cs = Theme.of(context).colorScheme;
+  final section = HubSection.of(context);
+  final hub = section == null ? null : hubOf(section);
+  final tabs = hub != null && hubInfo[hub]!.sections.length > 1 ? HubTabs(hub: hub, current: section!) : null;
+  return AppBar(
+    toolbarHeight: subtitle == null ? 64 : 72,
+    title: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      Text(tabs != null ? s[hubInfo[hub]!.key] : title),
+      if (subtitle != null)
+        Text(subtitle,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
+    ]),
+    bottom: tabs == null
+        ? bottom
+        : PreferredSize(
+            preferredSize: Size.fromHeight(HubTabs.height + (bottom?.preferredSize.height ?? 0)),
+            child: Column(children: [tabs, ?bottom]),
+          ),
+    actions: [
+      ...actions,
+      if (lmsPath != null)
+        HeaderButton(icon: Icons.open_in_new_rounded, tooltip: s['openInLms'], onPressed: () => LmsWebPage.open(context, lmsPath)),
+      HeaderButton(
+        icon: Icons.refresh_rounded,
+        tooltip: s['refresh'],
+        busy: app.syncing,
+        onPressed: () => app.refresh(),
+      ),
+      const SizedBox(width: 6),
+    ],
+  );
+}
+
+/// The sections of a hub as text tabs under the title ("Schedule · Deadlines ·
+/// Exams"); the open one is underlined in ink.
+class HubTabs extends StatelessWidget {
+  const HubTabs({super.key, required this.hub, required this.current});
+  final Hub hub;
+  final Dest current;
+
+  static const height = 42.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final app = context.watch<AppState>();
+    return Container(
+      height: height,
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: cs.outlineVariant))),
+      alignment: Alignment.bottomLeft,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          for (final d in hubInfo[hub]!.sections)
+            _tab(context, d, s[destInfo[d]!.tab], d == current, cs, d == Dest.inbox ? app.unread : 0),
+        ]),
+      ),
+    );
+  }
+
+  Widget _tab(BuildContext context, Dest d, String label, bool selected, ColorScheme cs, int badge) {
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: InkWell(
+        onTap: selected ? null : () => context.read<NavController>().go(d),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 9),
+          margin: const EdgeInsets.only(right: 6),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: selected ? cs.onSurface : Colors.transparent, width: 2)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected ? cs.onSurface : cs.onSurfaceVariant,
+                )),
+            if (badge > 0) ...[const SizedBox(width: 6), CountBadge(badge)],
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small rounded count, e.g. unread updates.
+class CountBadge extends StatelessWidget {
+  const CountBadge(this.count, {super.key});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      constraints: const BoxConstraints(minWidth: 18),
+      height: 18,
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(9)),
+      child: Text(count > 99 ? '99+' : '$count',
+          style: TextStyle(color: cs.onPrimary, fontSize: 11, fontWeight: FontWeight.w700, height: 1, fontFeatures: tabular)),
+    );
+  }
+}
+
+/// Standard page: header (see [pageAppBar]), sync banner, pull-to-refresh
+/// and a centred column on wide screens.
 class PageScaffold extends StatelessWidget {
   const PageScaffold({
     super.key,
@@ -72,32 +195,9 @@ class PageScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
-    final s = S.of(context);
+    final app = context.read<AppState>();
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: subtitle == null ? 64 : 72,
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(title),
-          if (subtitle != null)
-            Text(subtitle!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500)),
-        ]),
-        bottom: bottom,
-        actions: [
-          ...actions,
-          if (lmsPath != null)
-            HeaderButton(icon: Icons.open_in_new_rounded, tooltip: s['openInLms'], onPressed: () => LmsWebPage.open(context, lmsPath)),
-          HeaderButton(
-            icon: Icons.refresh_rounded,
-            tooltip: s['refresh'],
-            busy: app.syncing,
-            onPressed: () => app.refresh(),
-          ),
-          const SizedBox(width: 6),
-        ],
-      ),
+      appBar: pageAppBar(context, title: title, subtitle: subtitle, actions: actions, lmsPath: lmsPath, bottom: bottom),
       floatingActionButton: fab,
       body: RefreshIndicator(
         onRefresh: () => app.refresh(),

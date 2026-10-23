@@ -170,6 +170,15 @@ List<LmsChange> dueReminders(LmsSnapshot s, Set<String> sent, DateTime now) {
   return out;
 }
 
+/// The task a change is about. Change keys are the task key, or the task key
+/// followed by "|" and the upload id or your file when several tasks share a key.
+Assignment? taskForChange(LmsSnapshot snap, String key) {
+  for (final a in snap.assignments) {
+    if (a.key == key || key.startsWith('${a.key}|')) return a;
+  }
+  return null;
+}
+
 extension AssignmentSorting on List<Assignment> {
   List<Assignment> sortedByDeadline() {
     final l = [...this];

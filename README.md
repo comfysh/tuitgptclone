@@ -9,18 +9,21 @@
 **[⬇ Download the latest version](https://github.com/comfysh/tuitgptclone/releases/latest)**: `TuitMate-<version>.apk` for Android,
 `TuitMate-<version>-Setup.exe` for Windows.
 
-TuitMate is a personal, **unofficial** companion for [lms.tuit.uz](https://lms.tuit.uz): your day as a calm
-agenda, everything from your LMS in one place, quiet notifications that work without opening the app, an AI study
-assistant with the provider of your choice, and encrypted automation for n8n.
+TuitMate is a personal, **unofficial** companion for [lms.tuit.uz](https://lms.tuit.uz), organised around what
+you want to do rather than the LMS menu: **Today** (your day as an agenda), **Plan** (what is coming and how busy
+each week is), **Inbox** (everything that changed) and **Study** (courses, grades, attendance, files), plus **Ask**:
+one box to search everything or ask the AI. Quiet notifications work without opening the app, the AI works with the
+provider of your choice, and encrypted automation connects it to n8n.
 
 > Not affiliated with TUIT. It reads the same pages you see after signing in to LMS,
 > and only writes to LMS when **you** upload an answer.
 
 <p>
-  <img src="docs/screenshots/phone-today.png" width="200" alt="Today on Android">
-  <img src="docs/screenshots/phone-schedule.png" width="200" alt="Schedule with odd/even week">
-  <img src="docs/screenshots/phone-grades.png" width="200" alt="Grades and GPA">
-  <img src="docs/screenshots/phone-dark.png" width="200" alt="Dark theme">
+  <img src="docs/screenshots/phone-today.png" width="200" alt="Today: the day as an agenda, what's new, deadlines">
+  <img src="docs/screenshots/phone-plan.png" width="200" alt="Plan: workload by week and deadlines">
+  <img src="docs/screenshots/phone-inbox.png" width="200" alt="Inbox: every change in LMS">
+  <img src="docs/screenshots/phone-ask.png" width="200" alt="Ask: search everything or ask the AI">
+  <img src="docs/screenshots/phone-dark.png" width="200" alt="Inbox in the dark theme">
 </p>
 <img src="docs/screenshots/pc-today.png" width="680" alt="TuitMate on Windows">
 
@@ -28,21 +31,25 @@ assistant with the provider of your choice, and encrypted automation for n8n.
 
 ## Features
 
+The app has four places and Ask (the middle button on phones, **Ctrl+K** on PC):
+
 | | |
 |---|---|
-| **Today** | Your day as an **agenda**: classes, free time between them, tasks due today and exams, with a red *now* line and a countdown. Then what is due in the coming days, open tasks, NB hours, GPA, average rating, tomorrow's classes, the next exam and tuition debt. |
-| **Schedule** | Week strip with dates on phones, a full **weekly grid** on PC. **Odd / even weeks** (*toq / juft*) handled automatically; tap the week tag to correct it. Classes you missed are marked **NB**. Lesson topics for that date come from the course calendar. |
-| **Tasks** | Every assignment grouped by *overdue / today / tomorrow / this week / later / waiting for grade / graded*, with search and course filters. The task sheet shows the criteria, the teacher's file, your answer and the grade. **Upload your answer (≤ 50 MB)** straight from your phone or PC. |
-| **Courses** | Rating per course and the grade it is heading for (from the work graded so far, so tasks that aren't due yet don't drag it down), a **grade forecast** (how many points you still need for a 3, 4 or 5), lectures / practicals / labs with **teacher files** and your NBs, and the written exam questions. |
-| **Grades & GPA** | GPA (as the LMS shows it), credits earned, grade distribution, every semester of your study plan, and a **GPA simulator**: pick the grades you expect and see your new GPA. |
-| **Files** | Every teacher file of the semester in one place: search, filter by type or course, open, or **Ask AI** about it. |
-| **Attendance** | Hours used against the **74-hour** semester limit (1 NB = 2 academic hours; both adjustable), how many classes you can still miss, per-subject breakdown, every NB (excused ones marked). |
-| **Exams** | Exam date, time, room and format with a live countdown, results, test points, written questions. |
-| **News** | LMS news with a full article view. |
-| **Home-screen widget** (Android) | *TuitMate · Today*: the current or next class, the nearest deadline, today's classes, open tasks and NB hours. Updates itself at each class start and end, even when the app is closed. |
-| **Notifications** | New assignment, changed deadline, new grade, exam result or change, new absence, new teacher file, news, deadline reminders (24 h and 3 h before), optional "class in 10 minutes" reminders. **Not annoying:** quiet hours (silent at night), several updates arrive as one notification, a morning brief with today's classes and deadlines, and you pick which kinds notify you. **No need to open the app:** on Android checks run in the background every 15–120 min, and when LMS ends the session TuitMate signs in again by itself (with *Remember password*). On Windows TuitMate keeps running in the **system tray**. |
+| **Today** | Your day as an **agenda**: classes, free time between them, tasks due today and exams, with a red *now* line and a countdown. Then **what's new** (unread updates), what is due in the coming days, open tasks, NB hours, GPA, average rating, tomorrow's classes, the next exam and tuition debt. |
+| **Plan › Schedule** | Week strip with dates on phones, a full **weekly grid** on PC. **Odd / even weeks** (*toq / juft*) handled automatically; tap the week tag to correct it. Classes you missed are marked **NB**. Lesson topics for that date come from the course calendar. |
+| **Plan › Deadlines** | **Workload by week**: open tasks and exams in each of the next 8 weeks, busiest week named. Every assignment grouped by *overdue / today / tomorrow / this week / later / waiting for grade / graded*, with search and course filters. The task sheet shows the criteria, the teacher's file, your answer and the grade. **Upload your answer (≤ 50 MB)** straight from your phone or PC. |
+| **Plan › Exams** | Exam date, time, room and format with a live countdown, results, test points, written questions. |
+| **Inbox › Updates** | Everything TuitMate noticed in LMS, also while the app was closed: new tasks, changed deadlines, grades, NB, exam changes and results, teacher files, news. Grouped by day, unread marks, filters, "mark all as read"; tap one to open it. |
+| **Inbox › News** | LMS news with a full article view. |
+| **Study › Courses** | Rating per course and the grade it is heading for (from the work graded so far, so tasks that aren't due yet don't drag it down), a **grade forecast** (how many points you still need for a 3, 4 or 5), lectures / practicals / labs with **teacher files** and your NBs, and the written exam questions. |
+| **Study › Grades** | GPA (as the LMS shows it), credits earned, grade distribution, every semester of your study plan, and a **GPA simulator**: pick the grades you expect and see your new GPA. |
+| **Study › Attendance** | Hours used against the **74-hour** semester limit (1 NB = 2 academic hours; both adjustable), how many classes you can still miss, per-subject breakdown, every NB (excused ones marked). |
+| **Study › Files** | Every teacher file of the semester in one place: search, filter by type or course, open, or **Ask AI** about it. |
+| **Ask** | One box: type and it finds tasks, courses, teacher files, exams, news and pages; anything else goes to the AI **with your LMS data**. Ready-made questions (what is due, tomorrow's classes, plan my week…). |
 | **AI assistant** | A chat that knows your timetable, deadlines, grades, attendance and exams. Attach PDFs, Word, PowerPoint, Excel, images or text, or tap **Ask AI** on any teacher file or assignment. Replies support formulas (LaTeX) and code. Works with **Gemini, DeepSeek, OpenRouter, Groq, Mistral, OpenAI, Together, xAI, local models (Ollama / LM Studio)** or any OpenAI-compatible API. |
 | **Ask in ChatGPT** | You have ChatGPT Plus but no API key, so this button copies your question **together with your LMS context**, then opens ChatGPT (browser or app) so you can paste it there. |
+| **Notifications** | New assignment, changed deadline, new grade, exam result or change, new absence, new teacher file, news, deadline reminders (24 h and 3 h before), optional "class in 10 minutes" reminders. **Not annoying:** quiet hours (silent at night), several updates arrive as one notification, a morning brief with today's classes and deadlines, and you pick which kinds notify you. Tapping one opens the Inbox. **No need to open the app:** on Android checks run in the background every 15–120 min, and when LMS ends the session TuitMate signs in again by itself (with *Remember password*). On Windows TuitMate keeps running in the **system tray**. |
+| **Home-screen widget** (Android) | *TuitMate · Today*: the current or next class, the nearest deadline, today's classes, open tasks and NB hours. Updates itself at each class start and end, even when the app is closed. |
 | **LMS website** | The full lms.tuit.uz inside the app, already signed in, for anything not covered above. |
 | **Automation** (owner only) | Sends your LMS events (new tasks, deadlines, grades, NB, exams, files, news, a daily summary) to your own **n8n** workflow or server, **encrypted with AES-256-GCM** and signed. Includes a ready n8n workflow and a guide you can give to ChatGPT or Codex: [docs/AUTOMATION.md](docs/AUTOMATION.md). |
 | Languages | O'zbekcha, Русский, English · light / dark theme |
@@ -82,6 +89,7 @@ Compare the file's SHA-256 with `SHA256SUMS.txt` from the same release:
 1. Tap **Sign in to LMS**. The real lms.tuit.uz login page opens inside the app.
 2. Enter your login and password and press **Kirish**, or use **OneID**.
 3. That's it. Your data loads, and the app keeps your session. With *Remember password* on, the app signs you in again automatically when LMS ends your session. The password is stored only in the device keystore (Android Keystore / Windows Credential Manager).
+4. **Profile and settings:** tap your photo on *Today* (on PC: the bottom of the sidebar), or type "profile" in Ask.
 
 > Why the in-app login page? LMS protects login with Google reCAPTCHA. Signing in on the real page
 > lets reCAPTCHA work normally instead of bypassing it.
@@ -92,7 +100,7 @@ ChatGPT Plus doesn't include API access, so the built-in assistant uses an API k
 
 1. Open <https://aistudio.google.com/apikey> and sign in with any Google account.
 2. Click **Create API key** and copy it.
-3. In TuitMate, open **AI → Settings** (or the setup card on the AI tab), paste the key, then **Save** → **Test**.
+3. In TuitMate, open **Profile › AI settings** (or **Ask › Open the AI chat** and its setup card), paste the key, then **Save** → **Test**.
 
 You can change the model in *AI settings → Load models*. The default is `gemini-flash-latest`.
 
@@ -160,11 +168,12 @@ lib/
   lms/        LMS client (session cookies, endpoints), HTML/JSON parsers, data snapshot, change detection
   core/       settings, storage (cache + keystore), timetable/odd-even week + attendance math, grade forecast and
               expected grade, file library, texts (uz/ru/en), formatting
-  services/   notifications, background checks (WorkManager) and background sign-in, Windows tray,
-              Android home-screen widget data, automation (encrypted webhooks)
+  services/   notifications, background checks (WorkManager) and background sign-in, Inbox (change history),
+              Windows tray, Android home-screen widget data, automation (encrypted webhooks)
   ai/         AI providers (Gemini, DeepSeek, OpenAI-compatible), streaming, LMS context, file text, chat history
-  ui/         design system (design.dart, cards.dart) and screens (Today, Schedule, Tasks, Courses, Grades & GPA,
-              Attendance, Exams, Files, News, AI, Profile/Settings, LMS website)
+  ui/         design system (design.dart, cards.dart), navigation (nav.dart: places and sections, home_shell.dart),
+              Ask (ask_palette.dart) and screens (Today, Schedule, Deadlines, Exams, Inbox, News, Courses, Grades & GPA,
+              Attendance, Files, AI, Profile/Settings, LMS website)
 android/…/TuitWidgetProvider.kt   the home-screen widget
 test/         parser and logic tests, and every screen rendered at phone / PC size and in dark mode (flutter test)
 docs/AUTOMATION.md, docs/automation/   automation guide, n8n workflow, Node.js / Python decoders
@@ -173,13 +182,13 @@ docs/AUTOMATION.md, docs/automation/   automation guide, n8n workflow, Node.js /
 ## If something looks wrong
 
 LMS sometimes changes its pages. Each screen has an **Open in LMS** button (🌐) that shows the original page, and the
-**LMS website** tab always works. Parsers live in `lib/lms/parsers.dart`. Selectors are in one place, so a fix is usually one line.
+**LMS website** (sidebar on PC, Ask › LMS website on phones) always works. Parsers live in `lib/lms/parsers.dart`. Selectors are in one place, so a fix is usually one line.
 
 ## Privacy
 
 - Your LMS password and AI keys are kept in the OS keystore and never sent anywhere except lms.tuit.uz (password) or the AI provider you chose (key).
 - Your LMS data is cached on your device for offline use.
-- The AI only receives your LMS summary when **Use my LMS data** is on (AI tab → ⋮ menu).
+- The AI only receives your LMS summary when **Use my LMS data** is on (AI chat → ⋮ menu).
 - Automation events go only to the webhook URL you set, encrypted with your own key.
 - **Sign out** (Profile) deletes the cached data, chats, saved password, AI keys, the automation key and the widget's data.
 - More in [SECURITY.md](SECURITY.md), including how to report a security problem privately.
