@@ -6,10 +6,13 @@ import 'package:flutter/material.dart';
 
 import 'core/settings.dart';
 import 'core/storage.dart';
+import 'lms/changes.dart';
 import 'lms/lms_client.dart';
 import 'lms/models.dart';
 import 'lms/snapshot.dart';
+import 'services/automation.dart';
 import 'services/background.dart';
+import 'services/background_login.dart';
 import 'services/home_widget_service.dart';
 import 'services/notifier.dart';
 import 'services/web_env.dart';
@@ -37,6 +40,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Set when something asked for a refresh while one was running.
   bool _refreshAgain = false;
+
+  /// A background re-login just happened; don't loop if LMS refuses again.
+  bool _reloggedIn = false;
 
   /// Running sign-out, if any.
   Future<void>? _loggingOut;
@@ -90,7 +96,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   void _startDesktopTimer() {
     _timer?.cancel();
-    if (Platform.isAndroid || !settings.notifications) return;
+    if (Platform.isAndroid || (!settings.notifications && !Automation.active(settings))) return;
     _timer = Timer.periodic(Duration(minutes: settings.checkMinutes.clamp(5, 240)), (_) {
       if (loggedIn && !sessionExpired) refresh(full: false, silent: true);
     });
@@ -128,6 +134,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await client.importCookies(cookies);
     loggedIn = true;
     sessionExpired = false;
+    unawaited(BackgroundLogin.reset(storage)); // signed in by hand: background re-login may try again
     notifyListeners();
     await Notifier.requestPermission();
     await configureBackground();
@@ -166,12 +173,28 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         await storage.saveSnapshot(fresh);
       } catch (_) {}
       if (!loggedIn || client.epoch != epoch) return;
+      var changes = const <LmsChange>[];
       try {
-        await Notifier.processChanges(base.isEmpty ? null : base, fresh, settings, storage);
+        changes = await Notifier.processChanges(base.isEmpty ? null : base, fresh, settings, storage);
       } catch (_) {}
-      if (loggedIn && client.epoch == epoch) unawaited(HomeWidgetService.update(fresh, settings));
+      if (loggedIn && client.epoch == epoch) {
+        unawaited(HomeWidgetService.update(fresh, settings));
+        unawaited(Automation.deliver(changes: changes, snap: fresh, settings: settings, storage: storage));
+      }
     } on SessionExpiredException {
-      if (loggedIn && client.epoch == epoch) sessionExpired = true;
+      if (loggedIn && client.epoch == epoch) {
+        // Sign in again without asking (invisible login page), then sync once more.
+        if (!_reloggedIn && await BackgroundLogin.run(client, settings, storage) && loggedIn && client.epoch == epoch) {
+          _reloggedIn = true;
+          _refreshAgain = true;
+        } else {
+          sessionExpired = true;
+          // On Windows the window may be hidden in the tray: say so once.
+          if (silent && !Platform.isAndroid && settings.notifications) {
+            unawaited(Notifier.notifySessionExpired(settings, storage).catchError((_) {}));
+          }
+        }
+      }
     } catch (e) {
       if (loggedIn && client.epoch == epoch) lastError = e.toString();
     } finally {
@@ -182,6 +205,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (_refreshAgain && loggedIn && !sessionExpired) {
       _refreshAgain = false;
       unawaited(refresh());
+    } else {
+      _reloggedIn = false;
     }
   }
 
@@ -256,6 +281,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       await WebEnv.clearCookies();
       await storage.clearAll();
       await Secrets.deleteAll();
+      settings.adminUnlocked = false; // the automation key went with the other secrets
     } finally {
       wiping = false;
       notifyListeners();

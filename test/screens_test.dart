@@ -18,6 +18,7 @@ import 'package:tuitmate/lms/lms_client.dart';
 import 'package:tuitmate/lms/models.dart';
 import 'package:tuitmate/lms/snapshot.dart';
 import 'package:tuitmate/ui/attendance_screen.dart';
+import 'package:tuitmate/ui/automation_page.dart';
 import 'package:tuitmate/ui/chat_screen.dart';
 import 'package:tuitmate/ui/courses_screen.dart';
 import 'package:tuitmate/ui/deadlines_screen.dart';
@@ -135,6 +136,7 @@ Future<void> _loadFonts() async {
   await load('Inter', [
     for (final w in ['Regular', 'Medium', 'SemiBold', 'Bold', 'ExtraBold']) 'assets/fonts/Inter-$w.ttf',
   ]);
+  await load('SourceSerif', ['assets/fonts/SourceSerif4-Semibold.ttf', 'assets/fonts/SourceSerif4-Bold.ttf']);
   await load('MaterialIcons', ['$sdk/MaterialIcons-Regular.otf']);
 }
 
@@ -170,6 +172,8 @@ void main() {
     'news': () => const NewsScreen(),
     'news_detail': () => NewsDetailPage(item: app.snapshot.news.first),
     'profile': () => const ProfileScreen(),
+    'ai_settings': () => const AiSettingsPage(),
+    'automation': () => const AutomationPage(),
     'assistant': () => const ChatScreen(),
     'welcome': () => const WelcomeScreen(),
     'shell': () => const HomeShell(),

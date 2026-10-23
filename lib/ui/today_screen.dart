@@ -11,12 +11,15 @@ import '../core/strings.dart';
 import '../core/timetable.dart';
 import '../lms/changes.dart';
 import '../lms/models.dart';
-import 'cards.dart';
+import 'cards.dart' show deadlineLabel;
 import 'courses_screen.dart';
 import 'deadlines_screen.dart';
 import 'nav.dart';
 import 'widgets.dart';
 
+/// Today as one agenda in time order: classes, the gaps between them, what is
+/// due today and exams, with a "now" line. Then what is due this week, a strip
+/// of numbers and tomorrow.
 class TodayScreen extends StatefulWidget {
   const TodayScreen({super.key});
 
@@ -47,52 +50,39 @@ class _TodayScreenState extends State<TodayScreen> {
     final s = S.of(context);
     final snap = app.snapshot;
     final now = DateTime.now();
-    final today = classesOn(now, app.settings, snap);
-    final side = weekSideFor(now, app.settings, snap);
-    final current = currentOrNext(today, now);
+    final day = dateOnly(now);
     final nav = context.read<NavController>();
 
+    final classes = classesOn(now, app.settings, snap);
+    final tomorrow = classesOn(DateTime(now.year, now.month, now.day + 1), app.settings, snap);
     final open = snap.assignments.where(isOpenTask).toList().sortedByDeadline();
-    final att = AttendanceSummary.from(snap, app.settings);
-    // Same rule as the Courses screen: the LMS percentage, or achieved / max.
-    final ratings = [for (final p in snap.coursePages.values) ?_ratingPercent(p.rating)];
-    final gpa = snap.planSummary?.gpa ?? estimatedGpa(snap.studyPlan);
-    final avgRating = ratings.isEmpty ? null : ratings.reduce((a, b) => a + b) / ratings.length;
-    final nextExam = (snap.finals.where((f) => f.startsAt != null && f.startsAt!.isAfter(now)).toList()
+    final endOfDay = DateTime(now.year, now.month, now.day + 1);
+    final dueToday = [for (final a in open) if (a.deadline != null && a.deadline!.isBefore(endOfDay)) a];
+    final dueWeek = [
+      for (final a in open)
+        if (a.deadline == null || !a.deadline!.isBefore(endOfDay)) a,
+    ];
+    final examsToday = [
+      for (final f in snap.finals)
+        if (f.startsAt != null && !f.startsAt!.isBefore(day) && f.startsAt!.isBefore(endOfDay)) f,
+    ];
+    final nextExam = (snap.finals.where((f) => f.startsAt != null && !f.startsAt!.isBefore(endOfDay)).toList()
           ..sort((a, b) => a.startsAt!.compareTo(b.startsAt!)))
         .firstOrNull;
     final debt = snap.contracts.where((c) => c.current && (c.debt ?? 0) > 0).firstOrNull;
 
-    final stats = [
-      StatTile(
-        icon: Icons.assignment_rounded,
-        value: '${open.length}',
-        label: s['tdOpenTasks'],
-        color: Brand.primary,
-        onTap: () => nav.go(Dest.deadlines),
-      ),
-      StatTile(
-        icon: Icons.event_busy_rounded,
-        value: '${att.hoursUsed}/${att.limitHours}',
-        label: s['tdNbHours'],
-        color: att.ratio >= 0.75 ? Brand.danger : Brand.warning,
-        onTap: () => nav.go(Dest.attendance),
-      ),
-      StatTile(
-        icon: Icons.workspace_premium_rounded,
-        value: gpa?.toStringAsFixed(2) ?? '—',
-        label: s['tdGpa'],
-        color: Brand.success,
-        onTap: () => nav.go(Dest.grades),
-      ),
-      StatTile(
-        icon: Icons.insights_rounded,
-        value: avgRating == null ? '—' : '${fmtNum(avgRating)}%',
-        label: s['tdAvgRating'],
-        color: Brand.violet,
-        onTap: () => nav.go(Dest.courses),
-      ),
-    ];
+    final agenda = _Agenda(
+      now: now,
+      classes: classes,
+      due: dueToday,
+      exams: examsToday,
+      onClass: (slot) {
+        final c = slot.courseId == null ? null : snap.courseById(slot.courseId!);
+        if (c != null) CourseDetailPage.open(context, c);
+      },
+    );
+    final week = _DueWeek(tasks: dueWeek.take(6).toList(), total: dueWeek.length, now: now);
+    final numbers = _Numbers(open: open.length);
 
     return Scaffold(
       body: SafeArea(
@@ -103,91 +93,73 @@ class _TodayScreenState extends State<TodayScreen> {
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1080),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  _Header(name: snap.info?.fullName, photo: snap.info?.photo),
-                  const SizedBox(height: 14),
-                  const SyncBanner(),
-                  if (!snap.isEmpty) ...[
-                    _Hero(now: now, side: side, hasSchedule: snap.schedule.isNotEmpty, slot: current, hasClasses: today.isNotEmpty,
-                        tomorrowFirst: classesOn(now.add(const Duration(days: 1)), app.settings, snap).firstOrNull),
+              child: LayoutBuilder(builder: (context, c) {
+                final wide = c.maxWidth >= 900;
+                final left = <Widget>[
+                  SectionHeader(s['tdAgenda'], action: s['schedule'], onAction: () => nav.go(Dest.schedule)),
+                  agenda,
+                  SectionHeader(s['tdTomorrow'], padding: const EdgeInsets.fromLTRB(2, 18, 2, 8)),
+                  _Tomorrow(slots: tomorrow),
+                ];
+                final right = <Widget>[
+                  SectionHeader(s['tdDueNext'], action: s['all'], onAction: () => nav.go(Dest.deadlines)),
+                  week,
+                  const SizedBox(height: 12),
+                  numbers,
+                  if (nextExam != null) ...[
                     const SizedBox(height: 12),
-                    LayoutBuilder(builder: (context, c) {
-                      final cols = c.maxWidth >= 720 ? 4 : 2;
-                      final w = (c.maxWidth - 12 * (cols - 1)) / cols;
-                      return Wrap(spacing: 12, runSpacing: 12, children: [
-                        for (final t in stats) SizedBox(width: w, child: t),
-                      ]);
-                    }),
-                    if (debt != null) ...[
-                      const SizedBox(height: 12),
-                      AppCard(
-                        onTap: () => nav.go(Dest.profile),
-                        child: Row(children: [
-                          const TintIcon(Icons.account_balance_wallet_rounded, color: Brand.danger),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(s['tdDebt'], style: const TextStyle(fontWeight: FontWeight.w700)),
-                              Text(s.f('tdDebtSub', {'amount': '${fmtMoney(debt.debt!)} ${debt.currency ?? ''}', 'year': debt.year}),
-                                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                            ]),
-                          ),
-                          const Icon(Icons.chevron_right_rounded),
-                        ]),
-                      ),
-                    ],
-                    LayoutBuilder(builder: (context, c) {
-                      final wide = c.maxWidth >= 900;
-                      final classes = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        SectionHeader(s['classesToday'], action: s['schedule'], onAction: () => nav.go(Dest.schedule)),
-                        if (today.isEmpty)
-                          AppCard(child: EmptyView(icon: Icons.weekend_rounded, title: s['tdFreeDay'], subtitle: s['tdFreeDaySub']))
-                        else
-                          DayTimeline(
-                            slots: today,
-                            now: now,
-                            onTapSlot: (slot) {
-                              final c = slot.courseId == null ? null : snap.courseById(slot.courseId!);
-                              if (c != null) CourseDetailPage.open(context, c);
-                            },
-                          ),
-                      ]);
-                      final deadlines = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        SectionHeader(s['upcomingDeadlines'], action: s['all'], onAction: () => nav.go(Dest.deadlines)),
-                        if (open.isEmpty)
-                          AppCard(
-                              child: EmptyView(
-                                  icon: Icons.task_alt_rounded, title: s['tdAllDone'], subtitle: s['tdAllDoneSub'], color: Brand.success))
-                        else
-                          for (final a in open.take(5))
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: DeadlineCard(a: a, onTap: () => showAssignmentSheet(context, a)),
-                            ),
-                        if (nextExam != null) ...[
-                          SectionHeader(s['nextExam'], action: s['exams'], onAction: () => nav.go(Dest.exams)),
-                          _ExamCard(nextExam),
-                        ],
-                      ]);
-                      if (!wide) return Column(children: [classes, deadlines]);
-                      return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Expanded(child: classes),
-                        const SizedBox(width: 16),
-                        Expanded(child: deadlines),
-                      ]);
-                    }),
-                    if (snap.updatedAt != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Text(s.f('updated', {'time': fmtAgo(snap.updatedAt, s)}),
-                            textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
-                      ),
+                    _Line(
+                      icon: Icons.fact_check_outlined,
+                      color: Brand.danger,
+                      title: '${s['nextExam']}: ${nextExam.subject}',
+                      subtitle: [
+                        '${fmtWeekday(nextExam.startsAt!, s.lang)}, ${fmtDate(nextExam.startsAt!, s.lang)}',
+                        if (nextExam.from != null) nextExam.from!,
+                        if (nextExam.room != null) nextExam.room!,
+                      ].join(' · '),
+                      onTap: () => nav.go(Dest.exams),
+                    ),
                   ],
-                ],
-              ),
+                  if (debt != null) ...[
+                    const SizedBox(height: 12),
+                    _Line(
+                      icon: Icons.account_balance_wallet_outlined,
+                      color: Brand.danger,
+                      title: s['tdDebt'],
+                      subtitle: s.f('tdDebtSub', {'amount': '${fmtMoney(debt.debt!)} ${debt.currency ?? ''}'.trim(), 'year': debt.year}),
+                      onTap: () => nav.go(Dest.profile),
+                    ),
+                  ],
+                ];
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    _Masthead(now: now, name: snap.info?.fullName, photo: snap.info?.photo, showWeek: snap.schedule.isNotEmpty),
+                    const SizedBox(height: 6),
+                    const SyncBanner(),
+                    if (!snap.isEmpty) ...[
+                      if (wide)
+                        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Expanded(flex: 11, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: left)),
+                          const SizedBox(width: 24),
+                          Expanded(flex: 9, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: right)),
+                        ])
+                      else ...[
+                        ...left.take(2),
+                        ...right,
+                        ...left.skip(2),
+                      ],
+                      if (snap.updatedAt != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 18),
+                          child: Text(s.f('updated', {'time': fmtAgo(snap.updatedAt, s)}),
+                              textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
+                        ),
+                    ],
+                  ],
+                );
+              }),
             ),
           ),
         ),
@@ -196,16 +168,21 @@ class _TodayScreenState extends State<TodayScreen> {
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({this.name, this.photo});
+// ---------------------------------------------------------------- masthead
+
+class _Masthead extends StatelessWidget {
+  const _Masthead({required this.now, this.name, this.photo, required this.showWeek});
+  final DateTime now;
   final String? name;
   final String? photo;
+  final bool showWeek;
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
     final app = context.watch<AppState>();
-    final now = DateTime.now();
+    final cs = Theme.of(context).colorScheme;
+    final side = weekSideFor(now, app.settings, app.snapshot);
     final greeting = now.hour < 12
         ? s['goodMorning']
         : now.hour < 18
@@ -214,6 +191,7 @@ class _Header extends StatelessWidget {
     final parts = (name ?? '').split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
     final first = parts.length > 1 ? parts[1] : (parts.isNotEmpty ? parts[0] : '');
     final firstName = first.isEmpty ? '' : first[0].toUpperCase() + first.substring(1).toLowerCase();
+    final weekday = fmtWeekday(now, s.lang);
 
     ImageProvider? img;
     final p = photo;
@@ -222,143 +200,374 @@ class _Header extends StatelessWidget {
         img = MemoryImage(base64Decode(p.substring(p.indexOf(',') + 1)));
       } catch (_) {}
     }
-    final cs = Theme.of(context).colorScheme;
-    return Row(children: [
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+            [firstName.isEmpty ? greeting : '$greeting, $firstName', if (showWeek) side == WeekSide.right ? s['evenWeek'] : s['oddWeek']]
+                .join(' · '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          const SizedBox(height: 2),
+          Text('${weekday.isEmpty ? '' : weekday[0].toUpperCase() + weekday.substring(1)}, ${fmtDate(now, s.lang)}',
+              maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.headlineMedium),
+        ]),
+      ),
+      const SizedBox(width: 8),
+      HeaderButton(icon: Icons.refresh_rounded, tooltip: s['refresh'], busy: app.syncing, onPressed: () => app.refresh()),
       GestureDetector(
         onTap: () => context.read<NavController>().go(Dest.profile),
         child: CircleAvatar(
-          radius: 24,
-          backgroundColor: cs.primary.withValues(alpha: 0.15),
+          radius: 20,
+          backgroundColor: cs.surfaceContainerHighest,
           backgroundImage: img,
-          child: img == null ? Icon(Icons.person_rounded, color: cs.primary) : null,
+          child: img == null ? Icon(Icons.person_outline_rounded, color: cs.onSurfaceVariant, size: 22) : null,
         ),
       ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(greeting, style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
-          Text(firstName.isEmpty ? s['tdHello'] : firstName,
-              maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.headlineSmall),
-        ]),
-      ),
-      HeaderButton(icon: Icons.refresh_rounded, tooltip: s['refresh'], busy: app.syncing, onPressed: () => app.refresh()),
     ]);
   }
 }
 
-class _Hero extends StatelessWidget {
-  const _Hero({
-    required this.now,
-    required this.side,
-    required this.hasSchedule,
-    required this.slot,
-    required this.hasClasses,
-    this.tomorrowFirst,
-  });
-  final DateTime now;
-  final WeekSide side;
-  final bool hasSchedule;
+// ---------------------------------------------------------------- agenda
+
+enum _Kind { klass, gap, due, exam }
+
+class _Entry {
+  final _Kind kind;
+  final DateTime at;
+  final DateTime? end;
   final ClassSlot? slot;
-  final bool hasClasses;
-  final ClassSlot? tomorrowFirst;
+  final Assignment? task;
+  final ExamFinal? exam;
+  const _Entry(this.kind, this.at, {this.end, this.slot, this.task, this.exam});
+}
+
+/// The day in time order with a "now" rule between the past and the rest.
+class _Agenda extends StatelessWidget {
+  const _Agenda({required this.now, required this.classes, required this.due, required this.exams, required this.onClass});
+  final DateTime now;
+  final List<ClassSlot> classes;
+  final List<Assignment> due;
+  final List<ExamFinal> exams;
+  final void Function(ClassSlot) onClass;
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    final white70 = Colors.white.withValues(alpha: 0.78);
-    final header = Row(children: [
-      Expanded(
-        child: Text('${fmtWeekday(now, s.lang)}, ${fmtDate(now, s.lang)}',
-            style: TextStyle(color: white70, fontWeight: FontWeight.w600)),
-      ),
-      if (hasSchedule)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(20)),
-          child: Text(side == WeekSide.right ? s['evenWeek'] : s['oddWeek'],
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-        ),
-    ]);
+    final cs = Theme.of(context).colorScheme;
+    final entries = <_Entry>[];
+    for (var i = 0; i < classes.length; i++) {
+      final c = classes[i];
+      if (i > 0) {
+        final prevEnd = classes[i - 1].end;
+        if (c.start.difference(prevEnd).inMinutes >= 20) entries.add(_Entry(_Kind.gap, prevEnd, end: c.start));
+      }
+      entries.add(_Entry(_Kind.klass, c.start, end: c.end, slot: c));
+    }
+    for (final a in due) {
+      entries.add(_Entry(_Kind.due, a.deadline!, task: a));
+    }
+    for (final f in exams) {
+      entries.add(_Entry(_Kind.exam, f.startsAt!, exam: f));
+    }
+    entries.sort((a, b) => a.at.compareTo(b.at));
 
-    if (slot == null) {
-      return HeroCard(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          header,
-          const SizedBox(height: 18),
-          Row(children: [
-            const Icon(Icons.nights_stay_rounded, size: 34),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(hasClasses ? s['classesDone'] : s['tdFreeDay'],
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                Text(
-                  tomorrowFirst != null
-                      ? s.f('tdTomorrowFirst', {'time': fmtTime(tomorrowFirst!.start)})
-                      : (hasClasses ? s['tdDoneSub'] : s['tdFreeDaySub']),
-                  style: TextStyle(color: white70),
-                ),
-              ]),
-            ),
-          ]),
-        ]),
+    if (entries.isEmpty) {
+      return AppCard(
+        child: EmptyView(icon: Icons.wb_sunny_outlined, title: s['tdFreeDay'], subtitle: s['tdFreeDaySub'], color: Brand.success),
       );
     }
 
-    final sl = slot!;
-    final isNow = sl.isNow(now);
-    final total = sl.end.difference(sl.start).inSeconds;
-    final progress = isNow ? now.difference(sl.start).inSeconds / total : 0.0;
-    final mins = isNow ? sl.end.difference(now).inMinutes : sl.start.difference(now).inMinutes;
-    return HeroCard(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        header,
-        const SizedBox(height: 16),
-        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                    color: isNow ? Colors.white : Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(20)),
-                child: Text('${isNow ? s['now'] : s['next']} · ${fmtTime(sl.start)}–${fmtTime(sl.end)}',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 12, color: isNow ? Brand.primaryDeep : Colors.white)),
+    // The "now" rule goes before the first entry that hasn't started yet, so a
+    // class in progress sits above it (its bar shows how far along it is).
+    final nowAt = entries.indexWhere((e) => e.at.isAfter(now));
+    final running = entries.any((e) => (e.end ?? e.at).isAfter(now));
+    final rows = <Widget>[];
+    for (var i = 0; i < entries.length; i++) {
+      if (i == nowAt) rows.add(_NowRule(now: now));
+      final e = entries[i];
+      final past = !(e.end ?? e.at).isAfter(now);
+      rows.add(Opacity(opacity: past ? 0.5 : 1, child: _row(context, e, s, cs)));
+      if (i < entries.length - 1 && i + 1 != nowAt) rows.add(Divider(height: 1, indent: 72, color: cs.outlineVariant));
+    }
+    if (nowAt == -1) {
+      rows.add(_NowRule(now: now));
+      if (!running) {
+        rows.add(Padding(
+          padding: const EdgeInsets.fromLTRB(72, 4, 16, 14),
+          child: Text(s['tdDayDone'], style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13)),
+        ));
+      }
+    }
+    return AppCard(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: rows));
+  }
+
+  Widget _row(BuildContext context, _Entry e, S s, ColorScheme cs) {
+    switch (e.kind) {
+      case _Kind.gap:
+        final min = e.end!.difference(e.at).inMinutes;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: Row(children: [
+            SizedBox(width: 56, child: Text(fmtTime(e.at), style: _timeStyle(cs, muted: true))),
+            Icon(Icons.more_vert_rounded, size: 16, color: cs.outline),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(s.f('tdGap', {'t': fmtDuration(Duration(minutes: min), s.lang)}),
+                  style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5, fontStyle: FontStyle.italic)),
+            ),
+          ]),
+        );
+      case _Kind.klass:
+        final slot = e.slot!;
+        final color = _subjectColorOf(context, slot);
+        final active = slot.isNow(now);
+        final meta = [
+          lessonTypeName(slot.item.type, s),
+          if (slot.item.room != null) slot.item.room!,
+          if (slot.item.stream != null) slot.item.stream!,
+        ].join(' · ');
+        return InkWell(
+          onTap: () => onClass(slot),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(
+                width: 56,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(fmtTime(slot.start), style: _timeStyle(cs)),
+                  Text(fmtTime(slot.end), style: _timeStyle(cs, muted: true, small: true)),
+                ]),
               ),
-              const SizedBox(height: 10),
-              Text(sl.item.displaySubject,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800, height: 1.2, letterSpacing: -0.4)),
-              const SizedBox(height: 8),
-              Wrap(spacing: 14, runSpacing: 4, children: [
-                _HeroMeta(lessonTypeIcon(sl.item.type), lessonTypeName(sl.item.type, s)),
-                if (sl.item.room != null) _HeroMeta(Icons.location_on_rounded, sl.item.room!),
+              Container(width: 3, height: 40, margin: const EdgeInsets.only(right: 12, top: 2), color: color),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Expanded(
+                      child: Text(slot.item.displaySubject,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, height: 1.25)),
+                    ),
+                    if (active) ...[
+                      const SizedBox(width: 8),
+                      Tag(s.f('tdLeftShort', {'t': fmtDuration(slot.end.difference(now), s.lang)}), color: cs.primary),
+                    ] else if (slot.start.isAfter(now) && slot.start.difference(now) < const Duration(hours: 2)) ...[
+                      const SizedBox(width: 8),
+                      Tag(s.f('tdInShort', {'t': fmtDuration(slot.start.difference(now), s.lang)}), color: cs.onSurfaceVariant),
+                    ],
+                  ]),
+                  const SizedBox(height: 3),
+                  Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
+                  if (slot.topic != null) ...[
+                    const SizedBox(height: 4),
+                    Text(slot.topic!,
+                        maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5, height: 1.3)),
+                  ],
+                  if (active) ...[
+                    const SizedBox(height: 8),
+                    Bar(
+                      value: now.difference(slot.start).inSeconds / slot.end.difference(slot.start).inSeconds.clamp(1, 1 << 30),
+                      color: cs.primary,
+                      height: 3,
+                    ),
+                  ],
+                ]),
+              ),
+            ]),
+          ),
+        );
+      case _Kind.due:
+        final a = e.task!;
+        return InkWell(
+          onTap: () => showAssignmentSheet(context, a),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
+            child: Row(children: [
+              SizedBox(width: 56, child: Text(fmtTime(a.deadline!), style: _timeStyle(cs, color: Brand.danger))),
+              const Icon(Icons.flag_outlined, size: 18, color: Brand.danger),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(a.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text('${s['tdDue']} · ${a.courseName}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
+                ]),
+              ),
+            ]),
+          ),
+        );
+      case _Kind.exam:
+        final f = e.exam!;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
+          child: Row(children: [
+            SizedBox(width: 56, child: Text(fmtTime(e.at), style: _timeStyle(cs))),
+            const Icon(Icons.fact_check_outlined, size: 18, color: Brand.danger),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${s['tdExam']}: ${f.subject}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (f.room != null) Text(f.room!, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
               ]),
-              if (sl.topic != null) ...[
-                const SizedBox(height: 8),
-                Text(sl.topic!, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: white70, fontSize: 13)),
-              ],
-            ]),
-          ),
-          const SizedBox(width: 12),
-          Ring(
-            value: isNow ? progress : 0,
-            color: Colors.white,
-            track: Colors.white.withValues(alpha: 0.22),
-            size: 86,
-            stroke: 8,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(mins >= 120 ? '${(mins / 60).round()}' : '$mins',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
-              Text(isNow ? s['tdMinsLeft'] : s[mins >= 120 ? 'tdHoursTo' : 'tdMinsTo'],
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 11, color: white70, fontWeight: FontWeight.w600)),
-            ]),
-          ),
-        ]),
+            ),
+          ]),
+        );
+    }
+  }
+}
+
+Color _subjectColorOf(BuildContext context, ClassSlot slot) {
+  final snap = context.read<AppState>().snapshot;
+  return slot.courseId != null
+      ? courseColor(slot.courseId!, snap, name: slot.item.displaySubject)
+      : colorForCourseName(slot.item.displaySubject, snap);
+}
+
+TextStyle _timeStyle(ColorScheme cs, {bool muted = false, bool small = false, Color? color}) => TextStyle(
+      fontWeight: small ? FontWeight.w500 : FontWeight.w700,
+      fontSize: small ? 12 : 14.5,
+      color: color ?? (muted ? cs.onSurfaceVariant : cs.onSurface),
+      fontFeatures: tabular,
+    );
+
+class _NowRule extends StatelessWidget {
+  const _NowRule({required this.now});
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    const c = Brand.danger;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
+      child: Row(children: [
+        SizedBox(
+          width: 56,
+          child: Text(fmtTime(now), style: const TextStyle(color: c, fontWeight: FontWeight.w700, fontSize: 12, fontFeatures: tabular)),
+        ),
+        Container(width: 7, height: 7, decoration: const BoxDecoration(color: c, shape: BoxShape.circle)),
+        Expanded(child: Container(height: 1.4, color: c)),
       ]),
+    );
+  }
+}
+
+// ---------------------------------------------------------------- this week
+
+class _DueWeek extends StatelessWidget {
+  const _DueWeek({required this.tasks, required this.total, required this.now});
+  final List<Assignment> tasks;
+  final int total;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final cs = Theme.of(context).colorScheme;
+    if (tasks.isEmpty) {
+      return AppCard(child: EmptyView(icon: Icons.task_alt_rounded, title: s['tdAllDone'], subtitle: s['tdAllDoneSub'], color: Brand.success));
+    }
+    final rows = <Widget>[];
+    for (var i = 0; i < tasks.length; i++) {
+      final a = tasks[i];
+      final d = a.deadline;
+      final (label, color) = deadlineLabel(a, s, cs, now: now);
+      rows.add(InkWell(
+        onTap: () => showAssignmentSheet(context, a),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
+          child: Row(children: [
+            SizedBox(
+              width: 44,
+              child: Column(children: [
+                Text(d == null ? '—' : weekdayShort(d.weekday, s),
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                Text(d == null ? '' : '${d.day}',
+                    style: TextStyle(fontFamily: serif, fontSize: 20, fontWeight: FontWeight.w700, color: cs.onSurface, height: 1.1, fontFeatures: tabular)),
+              ]),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text(a.courseName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
+              ]),
+            ),
+            const SizedBox(width: 8),
+            Tag(label, color: color),
+          ]),
+        ),
+      ));
+      if (i < tasks.length - 1) rows.add(Divider(height: 1, indent: 68, color: cs.outlineVariant));
+    }
+    if (total > tasks.length) {
+      rows.add(Divider(height: 1, color: cs.outlineVariant));
+      rows.add(Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        child: Text(s.f('nfMore', {'n': total - tasks.length}), style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
+      ));
+    }
+    return AppCard(padding: const EdgeInsets.symmetric(vertical: 2), child: Column(children: rows));
+  }
+}
+
+// ---------------------------------------------------------------- numbers
+
+/// Open tasks · NB hours · GPA · rating in one bordered strip.
+class _Numbers extends StatelessWidget {
+  const _Numbers({required this.open});
+  final int open;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final app = context.watch<AppState>();
+    final nav = context.read<NavController>();
+    final att = AttendanceSummary.from(app.snapshot, app.settings);
+    final ratings = [for (final p in app.snapshot.coursePages.values) ?_ratingPercent(p.rating)];
+    final avg = ratings.isEmpty ? null : ratings.reduce((a, b) => a + b) / ratings.length;
+    final gpa = app.snapshot.planSummary?.gpa ?? estimatedGpa(app.snapshot.studyPlan);
+    final cells = [
+      (s['tdOpenTasks'], '$open', cs.onSurface, Dest.deadlines),
+      (s['tdNbHours'], '${att.hoursUsed}/${att.limitHours}', att.ratio >= 0.75 ? Brand.danger : cs.onSurface, Dest.attendance),
+      (s['tdGpa'], gpa?.toStringAsFixed(2) ?? '—', cs.onSurface, Dest.grades),
+      (s['tdAvgRating'], avg == null ? '—' : '${fmtNum(avg)}%', cs.onSurface, Dest.courses),
+    ];
+    Widget cell((String, String, Color, Dest) c) => InkWell(
+          onTap: () => nav.go(c.$4),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(c.$2,
+                  maxLines: 1,
+                  style: TextStyle(fontFamily: serif, fontSize: 22, fontWeight: FontWeight.w700, color: c.$3, fontFeatures: tabular)),
+              const SizedBox(height: 2),
+              Text(c.$1,
+                  maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11.5, height: 1.2)),
+            ]),
+          ),
+        );
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: LayoutBuilder(builder: (context, box) {
+        final two = box.maxWidth < 380;
+        final divider = VerticalDivider(width: 1, color: cs.outlineVariant);
+        if (!two) {
+          return IntrinsicHeight(
+            child: Row(children: [
+              for (var i = 0; i < cells.length; i++) ...[if (i > 0) divider, Expanded(child: cell(cells[i]))],
+            ]),
+          );
+        }
+        return Column(children: [
+          IntrinsicHeight(child: Row(children: [Expanded(child: cell(cells[0])), divider, Expanded(child: cell(cells[1]))])),
+          Divider(height: 1, color: cs.outlineVariant),
+          IntrinsicHeight(child: Row(children: [Expanded(child: cell(cells[2])), divider, Expanded(child: cell(cells[3]))])),
+        ]);
+      }),
     );
   }
 }
@@ -369,50 +578,72 @@ double? _ratingPercent(CourseRating r) {
   return r.ratingPercent ?? (a == null ? null : a / max * 100);
 }
 
-class _HeroMeta extends StatelessWidget {
-  const _HeroMeta(this.icon, this.text);
-  final IconData icon;
-  final String text;
+// ---------------------------------------------------------------- tomorrow, lines
 
-  @override
-  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 16, color: Colors.white),
-        const SizedBox(width: 4),
-        Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
-      ]);
-}
-
-class _ExamCard extends StatelessWidget {
-  const _ExamCard(this.f);
-  final ExamFinal f;
+class _Tomorrow extends StatelessWidget {
+  const _Tomorrow({required this.slots});
+  final List<ClassSlot> slots;
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    final days = dateOnly(f.startsAt!).difference(dateOnly(DateTime.now())).inDays;
+    final cs = Theme.of(context).colorScheme;
+    if (slots.isEmpty) {
+      return AppCard(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Text(s['tdNoClassesTomorrow'], style: TextStyle(color: cs.onSurfaceVariant)),
+      );
+    }
     return AppCard(
-      onTap: () => context.read<NavController>().go(Dest.exams),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(s.f('tdTomorrowLine', {'n': slots.length, 'time': fmtTime(slots.first.start)}),
+            style: const TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        for (final c in slots)
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Row(children: [
+              SizedBox(width: 48, child: Text(fmtTime(c.start), style: _timeStyle(cs, muted: true, small: true))),
+              Container(width: 3, height: 14, margin: const EdgeInsets.only(right: 8), color: _subjectColorOf(context, c)),
+              Expanded(
+                child: Text(
+                    '${c.item.displaySubject}${c.item.room != null ? ' · ${c.item.room}' : ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13)),
+              ),
+            ]),
+          ),
+      ]),
+    );
+  }
+}
+
+class _Line extends StatelessWidget {
+  const _Line({required this.icon, required this.color, required this.title, required this.subtitle, this.onTap});
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
       child: Row(children: [
-        Container(
-          width: 56,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(gradient: Brand.sunrise, borderRadius: BorderRadius.circular(radiusS)),
-          child: Column(children: [
-            Text('${f.startsAt!.day}', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
-            Text(fmtDate(f.startsAt!, s.lang).split(' ').last,
-                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-          ]),
-        ),
-        const SizedBox(width: 14),
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(f.subject, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text([fmtTime(f.startsAt!), if (f.room != null) '${s['room']} ${f.room}'].join(' · '),
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
           ]),
         ),
-        Tag(days == 0 ? s['todayLower'] : days == 1 ? s['tomorrow'] : s.f('inDays', {'n': days}), color: Brand.danger),
+        Icon(Icons.chevron_right_rounded, color: cs.outline),
       ]),
     );
   }

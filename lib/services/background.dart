@@ -10,6 +10,9 @@ import '../core/storage.dart';
 import '../lms/lms_client.dart';
 import '../lms/snapshot.dart';
 import 'home_widget_service.dart';
+import '../lms/changes.dart';
+import 'automation.dart';
+import 'background_login.dart';
 import 'notifier.dart';
 
 const _taskName = 'lms-check';
@@ -28,24 +31,43 @@ void callbackDispatcher() {
   });
 }
 
-/// One background check: download a light snapshot, compare, notify.
+/// One background check: download a light snapshot, compare, notify, and send
+/// automation events. When LMS has ended the session it signs in again with
+/// the saved password first (see BackgroundLogin).
 Future<void> runLmsCheck() async {
   final settings = await Settings.load(reload: true);
-  if (!settings.notifications) return;
+  if (!settings.notifications && !Automation.active(settings)) return;
   final storage = await AppStorage.instance();
   final client = LmsClient(storage.cookieDir);
-  if (!await client.hasSession()) return;
   final prev = await storage.loadSnapshot();
+  // Signed out: sign-out deletes the snapshot and the saved password.
+  if (prev == null && !await client.hasSession()) return;
+
+  Future<LmsSnapshot> fetch() => fetchSnapshot(client, previous: prev, semesterId: settings.semesterId, full: false);
+  LmsSnapshot now;
   try {
-    final now = await fetchSnapshot(client, previous: prev, semesterId: settings.semesterId, full: false);
-    await storage.saveSnapshot(now);
-    await HomeWidgetService.update(now, settings); // never throws
-    try {
-      await Notifier.processChanges(prev, now, settings, storage);
-    } catch (_) {}
+    // The cookie jar drops the session cookie once it expires (LMS keeps it ~2 h).
+    if (!await client.hasSession()) throw SessionExpiredException();
+    now = await fetch();
   } on SessionExpiredException {
-    await Notifier.notifySessionExpired(settings, storage);
+    if (!await BackgroundLogin.run(client, settings, storage)) {
+      await Notifier.notifySessionExpired(settings, storage);
+      return;
+    }
+    try {
+      now = await fetch();
+    } on SessionExpiredException {
+      await Notifier.notifySessionExpired(settings, storage);
+      return;
+    }
   }
+  await storage.saveSnapshot(now);
+  await HomeWidgetService.update(now, settings); // never throws
+  var changes = const <LmsChange>[];
+  try {
+    changes = await Notifier.processChanges(prev, now, settings, storage);
+  } catch (_) {}
+  await Automation.deliver(changes: changes, snap: now, settings: settings, storage: storage); // never throws
 }
 
 class Background {
@@ -58,7 +80,7 @@ class Background {
   static Future<void> configure(Settings settings) async {
     if (!Platform.isAndroid) return;
     await Workmanager().initialize(callbackDispatcher);
-    if (!settings.notifications) {
+    if (!settings.notifications && !Automation.active(settings)) {
       await Workmanager().cancelByUniqueName(_taskName);
       return;
     }

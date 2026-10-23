@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../ai/providers.dart';
 import '../lms/models.dart';
 
 enum AiProvider { gemini, openai }
@@ -139,17 +140,86 @@ class Settings {
   set autoLogin(bool v) => _p.setBool('autoLogin', v);
 
   // ---- AI
-  AiProvider get aiProvider => AiProvider.values[_p.getInt('aiProvider') ?? 0];
-  set aiProvider(AiProvider v) => _p.setInt('aiProvider', v.index);
+  // Provider presets: lib/ai/providers.dart. API keys are in the secure store
+  // (AiKeys in lib/ai/ai_service.dart), one per provider.
 
-  String get geminiModel => _p.getString('geminiModel') ?? 'gemini-flash-latest';
-  set geminiModel(String v) => _p.setString('geminiModel', v);
+  /// Id of the selected provider preset.
+  String get aiProviderId {
+    _migrateAi();
+    return AiPreset.of(_p.getString('aiProviderId')).id;
+  }
 
-  String get openaiBaseUrl => _p.getString('openaiBaseUrl') ?? 'https://api.groq.com/openai/v1';
-  set openaiBaseUrl(String v) => _p.setString('openaiBaseUrl', v);
+  set aiProviderId(String v) => _p.setString('aiProviderId', AiPreset.of(v).id);
 
-  String get openaiModel => _p.getString('openaiModel') ?? 'llama-3.3-70b-versatile';
-  set openaiModel(String v) => _p.setString('openaiModel', v);
+  AiPreset get aiPreset => AiPreset.of(aiProviderId);
+
+  /// Model picked for provider [id] (its default until one is picked;
+  /// empty for local servers and Custom until the student chooses).
+  String aiModelFor(String id) {
+    _migrateAi();
+    final p = AiPreset.of(id);
+    final v = _p.getString('aiModel.$id')?.trim() ?? '';
+    final m = v.isEmpty || p.retiredModels.contains(v) ? p.defaultModel : v;
+    return p.isGemini ? m.replaceFirst('models/', '') : m;
+  }
+
+  void setAiModelFor(String id, String? model) {
+    final v = model?.trim() ?? '';
+    v.isEmpty ? _p.remove('aiModel.$id') : _p.setString('aiModel.$id', v);
+  }
+
+  String get aiModel => aiModelFor(aiProviderId);
+
+  /// API address of provider [id]; only local servers and Custom can change it.
+  String aiBaseUrlFor(String id) {
+    final p = AiPreset.of(id);
+    if (!p.editableUrl) return p.baseUrl;
+    _migrateAi();
+    final v = _p.getString('aiBaseUrl.$id')?.trim() ?? '';
+    return v.isEmpty ? p.baseUrl : v;
+  }
+
+  void setAiBaseUrlFor(String id, String? url) {
+    final v = (url ?? '').trim().replaceAll(RegExp(r'/+$'), '');
+    v.isEmpty ? _p.remove('aiBaseUrl.$id') : _p.setString('aiBaseUrl.$id', v);
+  }
+
+  String get aiBaseUrl => aiBaseUrlFor(aiProviderId);
+
+  /// For the UI: "DeepSeek · deepseek-flash".
+  String get aiSummary {
+    final p = aiPreset, m = aiModel;
+    return m.isEmpty ? p.name : '${p.name} · $m';
+  }
+
+  /// The provider that inherits the 1.0 "OpenAI-compatible" key.
+  String get aiLegacyKeyProvider {
+    _migrateAi();
+    return _p.getString('aiLegacyKeyTo') ?? AiPreset.groq.id;
+  }
+
+  /// 1.0 had Gemini or one OpenAI-compatible address (Groq by default). Their
+  /// model and address move to the matching preset once, so nobody loses
+  /// their setup. Keys follow in AiKeys.read.
+  void _migrateAi() {
+    if (_p.containsKey('aiProviderId')) return;
+    final oldUrl = _p.getString('openaiBaseUrl')?.trim() ?? '';
+    final compat = AiPreset.forUrl(oldUrl.isEmpty ? AiPreset.groq.baseUrl : oldUrl);
+    if (compat.editableUrl && oldUrl.isNotEmpty) setAiBaseUrlFor(compat.id, oldUrl);
+    final oldModel = _p.getString('openaiModel')?.trim() ?? '';
+    if (oldModel.isNotEmpty) _p.setString('aiModel.${compat.id}', oldModel);
+    final oldGemini = (_p.getString('geminiModel') ?? '').trim().replaceFirst('models/', '');
+    if (oldGemini.isNotEmpty) _p.setString('aiModel.${AiPreset.gemini.id}', oldGemini);
+    _p.setString('aiLegacyKeyTo', compat.id);
+    final wasCompat = _p.getInt('aiProvider') == AiProvider.openai.index;
+    _p.setString('aiProviderId', wasCompat ? compat.id : AiPreset.gemini.id);
+  }
+
+  // 1.0 names, still read by older screens.
+  AiProvider get aiProvider => aiPreset.isGemini ? AiProvider.gemini : AiProvider.openai;
+  String get geminiModel => aiModelFor(AiPreset.gemini.id);
+  String get openaiBaseUrl => aiBaseUrl;
+  String get openaiModel => aiModel;
 
   bool get aiUseLmsContext => _p.getBool('aiUseLmsContext') ?? true;
   set aiUseLmsContext(bool v) => _p.setBool('aiUseLmsContext', v);

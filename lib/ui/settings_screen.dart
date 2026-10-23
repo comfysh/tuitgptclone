@@ -6,13 +6,14 @@ import 'package:provider/provider.dart';
 
 import '../app_state.dart';
 import '../core/format.dart';
-import '../core/settings.dart';
 import '../core/storage.dart';
 import '../core/strings.dart';
 import '../core/version.dart';
+import '../lms/changes.dart';
 import '../lms/models.dart';
 import '../services/notifier.dart';
 import 'ai_settings_page.dart';
+import 'automation_page.dart';
 import 'lms_web_page.dart';
 import 'widgets.dart';
 
@@ -157,7 +158,8 @@ class _HeroChip extends StatelessWidget {
           child: Text(text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+              // Explicit: the Material around a tappable chip resets the inherited text colour.
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5, color: Colors.white)),
         ),
         if (onTap != null) ...[
           const SizedBox(width: 5),
@@ -447,6 +449,22 @@ class _SettingsSections extends StatelessWidget {
             app.touch();
           },
         ),
+        FutureBuilder<String?>(
+          future: Secrets.read(Secrets.lmsPassword),
+          builder: (context, pass) => _SwitchRow(
+            icon: Icons.sync_lock_rounded,
+            color: Brand.success,
+            title: s['nfStaySignedIn'],
+            subtitle: (pass.data ?? '').isEmpty && pass.connectionState == ConnectionState.done
+                ? s['nfNeedsPassword']
+                : s['nfStaySignedInSub'],
+            value: st.backgroundLogin,
+            onChanged: (v) {
+              st.backgroundLogin = v;
+              app.touch();
+            },
+          ),
+        ),
         _Row(
           icon: Icons.logout_rounded,
           color: cs.error,
@@ -524,6 +542,78 @@ class _SettingsSections extends StatelessWidget {
             await app.configureBackground();
           },
         ),
+        _SwitchRow(
+          icon: Icons.bedtime_outlined,
+          color: Brand.violet,
+          title: s['nfQuiet'],
+          subtitle: s.f('nfQuietSub', {'from': _hhmm(st.quietFrom), 'to': _hhmm(st.quietTo)}),
+          value: st.quietHours,
+          onChanged: (v) async {
+            st.quietHours = v;
+            app.touch();
+            await Notifier.scheduleMorningBrief(app.snapshot, st);
+          },
+        ),
+        if (st.quietHours)
+          _Row(
+            icon: Icons.schedule_rounded,
+            color: Brand.violet,
+            title: '${s['nfQuietFrom']} – ${s['nfQuietTo']}',
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              _TimeChip(minutes: st.quietFrom, onChanged: (m) {
+                st.quietFrom = m;
+                app.touch();
+              }),
+              const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Text('–')),
+              _TimeChip(minutes: st.quietTo, onChanged: (m) {
+                st.quietTo = m;
+                app.touch();
+              }),
+            ]),
+          ),
+        _SwitchRow(
+          icon: Icons.wb_twilight_rounded,
+          color: Brand.warning,
+          title: s['nfBrief'],
+          subtitle: s.f('nfBriefSub', {'time': _hhmm(st.briefAt)}),
+          value: st.morningBrief,
+          onChanged: (v) async {
+            st.morningBrief = v;
+            app.touch();
+            await Notifier.scheduleMorningBrief(app.snapshot, st);
+          },
+        ),
+        if (st.morningBrief)
+          _Row(
+            icon: Icons.alarm_on_rounded,
+            color: Brand.warning,
+            title: s['nfBriefAt'],
+            trailing: _TimeChip(minutes: st.briefAt, onChanged: (m) async {
+              st.briefAt = m;
+              app.touch();
+              await Notifier.scheduleMorningBrief(app.snapshot, st);
+            }),
+          ),
+        _Row(
+          icon: Icons.tune_rounded,
+          color: Brand.info,
+          title: s['nfKinds'],
+          subtitle: s['nfKindsSub'],
+          trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
+          onTap: () => _pickKinds(context),
+        ),
+        if (Platform.isWindows)
+          _SwitchRow(
+            icon: Icons.move_to_inbox_rounded,
+            color: Brand.primary,
+            title: s['nfTray'],
+            subtitle: s['nfTraySub'],
+            value: st.closeToTray,
+            onChanged: (v) {
+              st.closeToTray = v;
+              app.touch();
+            },
+          ),
         _SwitchRow(
           icon: Icons.alarm_rounded,
           color: Brand.warning,
@@ -603,9 +693,7 @@ class _SettingsSections extends StatelessWidget {
           icon: Icons.auto_awesome_rounded,
           color: Brand.violet,
           title: s['aiSettings'],
-          subtitle: st.aiProvider == AiProvider.gemini
-              ? 'Google Gemini · ${st.geminiModel}'
-              : '${st.openaiBaseUrl} · ${st.openaiModel}',
+          subtitle: st.aiSummary,
           trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AiSettingsPage())),
         ),
@@ -622,6 +710,21 @@ class _SettingsSections extends StatelessWidget {
         ),
       ]),
 
+      // ---- automation (owner only)
+      if (st.adminUnlocked) ...[
+        SectionHeader(s['auTitle']),
+        _Group([
+          _Row(
+            icon: Icons.hub_outlined,
+            color: Brand.primary,
+            title: s['auSettingsRow'],
+            subtitle: st.webhookUrl == null ? s['auSettingsSub'] : Uri.tryParse(st.webhookUrl!)?.host ?? st.webhookUrl!,
+            trailing: Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
+            onTap: () => AutomationPage.open(context),
+          ),
+        ]),
+      ],
+
       // ---- about
       SectionHeader(s['about']),
       _Group([
@@ -632,14 +735,15 @@ class _SettingsSections extends StatelessWidget {
               Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(gradient: Brand.heroFor(context), borderRadius: BorderRadius.circular(14)),
-                child: const Icon(Icons.school_rounded, color: Colors.white),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: cs.onSurface, borderRadius: BorderRadius.circular(radiusS)),
+                child: Text('T', style: TextStyle(fontFamily: serif, fontSize: 26, fontWeight: FontWeight.w700, color: cs.surface, height: 1)),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(s['appName'], style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-                  Text(s.f('pfVersion', {'v': appVersion}), style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
+                  const _VersionLine(),
                 ]),
               ),
             ]),
@@ -910,9 +1014,7 @@ class _ThemeSwitch extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: value == mode ? cs.surface : Colors.transparent,
                     borderRadius: BorderRadius.circular(9),
-                    boxShadow: value == mode
-                        ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 6, offset: const Offset(0, 1))]
-                        : null,
+                    border: Border.all(color: value == mode ? cs.outlineVariant : Colors.transparent),
                   ),
                   child: Icon(icon, size: 18, color: value == mode ? cs.primary : cs.onSurfaceVariant),
                 ),
@@ -920,6 +1022,114 @@ class _ThemeSwitch extends StatelessWidget {
             ),
           ),
       ]),
+    );
+  }
+}
+
+String _hhmm(int minutes) => '${(minutes ~/ 60).toString().padLeft(2, '0')}:${(minutes % 60).toString().padLeft(2, '0')}';
+
+/// A time of day that opens the time picker.
+class _TimeChip extends StatelessWidget {
+  const _TimeChip({required this.minutes, required this.onChanged});
+  final int minutes;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), minimumSize: const Size(0, 40)),
+      onPressed: () async {
+        final t = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60),
+          builder: (ctx, child) => MediaQuery(data: MediaQuery.of(ctx).copyWith(alwaysUse24HourFormat: true), child: child!),
+        );
+        if (t != null) onChanged(t.hour * 60 + t.minute);
+      },
+      child: Text(_hhmm(minutes), style: const TextStyle(fontFeatures: tabular, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+/// Which kinds of updates notify (Settings.mutedKinds holds the ones turned off).
+Future<void> _pickKinds(BuildContext context) {
+  final app = context.read<AppState>();
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
+      final s = S.of(ctx);
+      final muted = app.settings.mutedKinds;
+      return SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text(s['nfKinds'], style: Theme.of(ctx).textTheme.titleLarge),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(s['nfKindsSub'], style: TextStyle(color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            ),
+            for (final k in ChangeKind.values)
+              CheckboxListTile(
+                title: Text(s['nfKind_${k.name}']),
+                value: !muted.contains(k.name),
+                onChanged: (v) {
+                  final next = {...muted};
+                  v == true ? next.remove(k.name) : next.add(k.name);
+                  app.settings.mutedKinds = next;
+                  app.touch();
+                  setState(() {});
+                },
+              ),
+          ]),
+        ),
+      );
+    }),
+  );
+}
+
+/// Version; tapping it 7 times asks for the owner's key (admin mode).
+class _VersionLine extends StatefulWidget {
+  const _VersionLine();
+
+  @override
+  State<_VersionLine> createState() => _VersionLineState();
+}
+
+class _VersionLineState extends State<_VersionLine> {
+  int _taps = 0;
+  DateTime? _last;
+
+  Future<void> _tap() async {
+    final now = DateTime.now();
+    _taps = (_last != null && now.difference(_last!) < const Duration(seconds: 2)) ? _taps + 1 : 1;
+    _last = now;
+    if (_taps < 7) return;
+    _taps = 0;
+    final app = context.read<AppState>();
+    if (app.settings.adminUnlocked) {
+      await AutomationPage.open(context);
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    final s = S.read(context);
+    if (await showAdminUnlock(context)) {
+      messenger.showSnackBar(SnackBar(content: Text(s['auUnlocked'])));
+      if (mounted) await AutomationPage.open(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    return GestureDetector(
+      onTap: _tap,
+      behavior: HitTestBehavior.opaque,
+      child: Text(s.f('pfVersion', {'v': appVersion}),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12.5)),
     );
   }
 }

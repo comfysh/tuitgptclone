@@ -232,8 +232,7 @@ Color _moreColor(Dest d) => switch (d) {
       Dest.exams => Brand.danger,
       Dest.files => Brand.violet,
       Dest.news => Brand.info,
-      Dest.lms => const Color(0xFF64748B),
-      _ => const Color(0xFF14B8A6),
+      _ => Brand.inkMuted,
     };
 
 /// PC sidebar: brand, grouped destinations, compact (icons only) on narrower windows.
@@ -256,21 +255,33 @@ class _Sidebar extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Container(
       width: compact ? 84 : 248,
-      color: cs.surface,
+      decoration: BoxDecoration(color: cs.surface, border: Border(right: BorderSide(color: cs.outlineVariant))),
       child: SafeArea(
         child: ListView(padding: const EdgeInsets.fromLTRB(12, 18, 12, 18), children: [
           Padding(
             padding: EdgeInsets.only(left: compact ? 0 : 8, bottom: 18),
             child: Row(mainAxisAlignment: compact ? MainAxisAlignment.center : MainAxisAlignment.start, children: [
               Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(gradient: Brand.hero, borderRadius: BorderRadius.circular(radiusS)),
-                child: const Icon(Icons.school_rounded, color: Colors.white),
+                width: 38,
+                height: 38,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: cs.onSurface,
+                  borderRadius: BorderRadius.circular(radiusS),
+                ),
+                child: Text('T',
+                    style: TextStyle(fontFamily: serif, fontSize: 22, fontWeight: FontWeight.w700, color: cs.surface, height: 1)),
               ),
               if (!compact) ...[
                 const SizedBox(width: 10),
-                Text('TuitMate', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                Flexible(
+                  child: Text('TuitMate',
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                      style: TextStyle(fontFamily: serif, fontSize: 22, fontWeight: FontWeight.w700, color: cs.onSurface)),
+                ),
+                Container(width: 6, height: 6, margin: const EdgeInsets.only(left: 3, top: 10), decoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle)),
               ],
             ]),
           ),
@@ -286,9 +297,9 @@ class _Sidebar extends StatelessWidget {
   Widget _item(BuildContext context, Dest d) {
     final cs = Theme.of(context).colorScheme;
     final selected = d == current;
-    final fg = selected ? cs.primary : cs.onSurfaceVariant;
+    final fg = selected ? cs.onPrimaryContainer : cs.onSurfaceVariant;
     final tile = Material(
-      color: selected ? cs.primary.withValues(alpha: 0.12) : Colors.transparent,
+      color: selected ? cs.primaryContainer : Colors.transparent,
       borderRadius: BorderRadius.circular(radiusS),
       child: InkWell(
         borderRadius: BorderRadius.circular(radiusS),
@@ -303,7 +314,7 @@ class _Sidebar extends StatelessWidget {
                 child: Text(label(d),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: selected ? cs.primary : cs.onSurface, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+                    style: TextStyle(color: selected ? cs.onPrimaryContainer : cs.onSurface, fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
               ),
               if (d == Dest.lms) Icon(Icons.open_in_new_rounded, size: 16, color: cs.outline),
             ],

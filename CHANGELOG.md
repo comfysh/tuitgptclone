@@ -4,6 +4,24 @@ All notable changes to TuitMate. The release notes on GitHub are taken from this
 add a section `## [x.y.z] - date` and raise `version:` in `pubspec.yaml` (and `lib/core/version.dart`)
 to publish a new release.
 
+## [1.1.0] - 2026-10-23
+
+A new look of its own, quieter notifications that work without opening the app, more AI providers,
+and automation for the owner.
+
+### Highlights
+- **New "paper" design**: warm paper background, ink-black headers, a serif font (Source Serif 4) for titles and numbers, flat bordered cards and calm colours. Light and dark mode.
+- **Today is now an agenda**: your day from top to bottom (classes, free time between them, tasks due today and exams) with a red *now* line. Below it: due in the coming days, your numbers, tomorrow's classes, the next exam and tuition debt. Two columns on PC.
+- **Stay signed in**: when LMS ends the session (about every 2 hours), TuitMate signs in again by itself with the saved password, also in the background, so checks and notifications keep working without opening the app. If LMS refuses, you get one notification.
+- **Quieter notifications**: quiet hours (default 22:30–07:00, nothing makes a sound then), several updates from one check arrive as **one** notification, a **morning brief** with today's classes and deadlines (default 07:30), and you choose which kinds of updates notify you (new teacher files are off by default).
+- **Windows: runs in the system tray**. Closing the window keeps TuitMate in the tray so checks and notifications go on; *Start with Windows* starts it hidden in the tray. Open, refresh or quit from the tray icon.
+- **More AI providers**: **DeepSeek**, OpenRouter, Groq, Mistral, OpenAI, Together, xAI, local models (Ollama / LM Studio) and any OpenAI-compatible API, next to Gemini. Each provider keeps its own key and model.
+- **Automation (owner only)**: TuitMate can send your LMS events (new tasks, deadlines, grades, NB, exams, files, news, a daily summary) to your own n8n workflow or server, encrypted with AES-256-GCM and signed. A ready n8n workflow and a guide for AI assistants are in [docs/AUTOMATION.md](docs/AUTOMATION.md).
+
+### Fixed
+- The expected grade counts missed tasks, so it is honest late in the semester too.
+- The Android background check no longer stops silently when the session cookie expires.
+
 ## [1.0.0] - 2026-10-22
 
 First full version for Android and Windows.

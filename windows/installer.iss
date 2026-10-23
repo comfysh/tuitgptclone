@@ -2,13 +2,16 @@
 #define AppName "TuitMate"
 ; The release workflow passes the pubspec.yaml version with /DAppVersion=x.y.z.
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.1.0"
 #endif
 
 [Setup]
 AppId={{6F1C3B0E-6A54-4D1E-9A3E-2F73C8A1B7D4}
 AppName={#AppName}
 AppVersion={#AppVersion}
+; The running app (also when it sits in the tray) holds this mutex (windows/runner/main.cpp):
+; Setup asks to quit TuitMate before installing over it or uninstalling.
+AppMutex=Uz.Personal.TuitMate.SingleInstance
 AppPublisher=TuitMate (personal)
 DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppName}
@@ -31,7 +34,8 @@ Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignore
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\TuitMate.exe"; AppUserModelID: "Uz.Personal.TuitMate"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\TuitMate.exe"; Tasks: desktopicon; AppUserModelID: "Uz.Personal.TuitMate"
-Name: "{userstartup}\{#AppName}"; Filename: "{app}\TuitMate.exe"; Tasks: startup
+; --minimized: start hidden with only the tray icon (checks LMS in the background).
+Name: "{userstartup}\{#AppName}"; Filename: "{app}\TuitMate.exe"; Parameters: "--minimized"; Tasks: startup
 
 [Run]
 Filename: "{app}\TuitMate.exe"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent

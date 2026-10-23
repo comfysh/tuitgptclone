@@ -16,8 +16,6 @@ import '../ai/lms_context.dart';
 import '../app_state.dart';
 import '../core/format.dart';
 import '../core/insights.dart';
-import '../core/settings.dart';
-import '../core/storage.dart';
 import '../core/strings.dart';
 import 'nav.dart';
 import 'settings_screen.dart';
@@ -150,8 +148,11 @@ class _ChatScreenState extends State<ChatScreen> {
       final att = await ChatAttachment.save(f.name, await f.readAsBytes());
       if (!mounted) return;
       final settings = context.read<AppState>().settings;
-      if (att.isPdf && settings.aiProvider != AiProvider.gemini) {
-        messenger.showSnackBar(SnackBar(content: Text(s['pdfOnlyGemini'])));
+      final preset = settings.aiPreset;
+      if (att.isPdf && !preset.nativePdf) {
+        messenger.showSnackBar(SnackBar(content: Text(s.f('aiNoPdf', {'name': preset.displayName((k) => s[k])}))));
+      } else if (att.isImage && !preset.supportsImages(settings.aiModel)) {
+        messenger.showSnackBar(SnackBar(content: Text(s.f('aiNoImages', {'model': settings.aiModel}))));
       }
       setState(() => _pending.add(att));
     }
@@ -444,8 +445,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final s = S.of(context);
     final settings = context.read<AppState>().settings;
     final cs = Theme.of(context).colorScheme;
-    final gemini = settings.aiProvider == AiProvider.gemini;
-    final model = gemini ? settings.geminiModel.replaceFirst('models/', '') : settings.openaiModel;
+    final preset = settings.aiPreset;
+    final model = settings.aiModel.isEmpty ? preset.displayName((k) => s[k]) : settings.aiModel;
     return Padding(
       padding: EdgeInsets.fromLTRB(wide ? 20 : 4, 10, 8, 10),
       child: Row(children: [
@@ -477,7 +478,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     borderRadius: BorderRadius.circular(20),
                     onTap: _openSettings,
                     child: _hasKey
-                        ? Tag(model, icon: gemini ? Icons.auto_awesome_rounded : Icons.hub_rounded, color: Brand.violet)
+                        ? Tag(model, icon: preset.icon, color: Brand.violet)
                         : Tag(s['chNoKey'], icon: Icons.key_off_rounded, color: Brand.warning),
                   ),
                 ),
@@ -560,10 +561,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 decoration: BoxDecoration(
                   color: cs.surface,
                   borderRadius: BorderRadius.circular(26),
-                  border: Border.all(color: cs.outlineVariant.withValues(alpha: dark ? 0.35 : 0.55)),
-                  boxShadow: dark
-                      ? null
-                      : [BoxShadow(color: const Color(0xFF1B2559).withValues(alpha: 0.06), blurRadius: 18, offset: const Offset(0, 4))],
+                  border: Border.all(color: cs.outlineVariant.withValues(alpha: dark ? 0.35 : 0.9)),
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                   if (_pending.isNotEmpty)
@@ -804,10 +802,7 @@ class _Bubble extends StatelessWidget {
         ),
         border: m.error
             ? Border.all(color: Brand.danger.withValues(alpha: 0.25))
-            : (dark ? Border.all(color: Colors.white.withValues(alpha: 0.06)) : null),
-        boxShadow: dark
-            ? null
-            : [BoxShadow(color: const Color(0xFF1B2559).withValues(alpha: 0.05), blurRadius: 14, offset: const Offset(0, 3))],
+            : Border.all(color: dark ? Colors.white.withValues(alpha: 0.06) : cs.outlineVariant),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         if (m.attachments.isNotEmpty)
@@ -984,9 +979,8 @@ class _MiniAction extends StatelessWidget {
 
 /// Gradient rounded square with the sparkle: the assistant's avatar.
 class _AiMark extends StatelessWidget {
-  const _AiMark({required this.size, this.glow = false});
+  const _AiMark({required this.size});
   final double size;
-  final bool glow;
 
   @override
   Widget build(BuildContext context) {
@@ -996,9 +990,6 @@ class _AiMark extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: Brand.heroFor(context),
         borderRadius: BorderRadius.circular(size * 0.32),
-        boxShadow: glow
-            ? [BoxShadow(color: Brand.primary.withValues(alpha: 0.32), blurRadius: 28, offset: const Offset(0, 10))]
-            : null,
       ),
       child: Icon(Icons.auto_awesome_rounded, color: Colors.white, size: size * 0.52),
     );
@@ -1152,7 +1143,7 @@ class _Welcome extends StatelessWidget {
     return LayoutBuilder(builder: (context, c) {
       final side = math.max(16.0, (c.maxWidth - 760) / 2);
       return ListView(padding: EdgeInsets.fromLTRB(side, 28, side, 16), children: [
-        const Center(child: _AiMark(size: 68, glow: true)),
+        const Center(child: _AiMark(size: 68)),
         const SizedBox(height: 18),
         Text(s['chHeroTitle'], textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 8),
@@ -1295,8 +1286,8 @@ class _KeySetupCardState extends State<_KeySetupCard> {
           FilledButton.icon(
             onPressed: () async {
               final app = context.read<AppState>();
-              await Secrets.write(Secrets.geminiKey, _key.text.trim());
-              app.settings.aiProvider = AiProvider.gemini;
+              await AiKeys.write(app.settings, AiPreset.gemini.id, _key.text.trim());
+              app.settings.aiProviderId = AiPreset.gemini.id;
               widget.onSaved();
             },
             icon: const Icon(Icons.check_rounded),

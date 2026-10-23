@@ -32,6 +32,9 @@ class AppStorage {
   File get snapshotFile => File(_p('snapshot.json'));
   File get notifyStateFile => File(_p('notify_state.json'));
   File get chatsFile => File(_p('chats.json'));
+
+  /// Webhook delivery state and the queue of events not delivered yet (automation).
+  File get automationFile => File(_p('automation.json'));
   Directory get chatFilesDir => Directory(_p('chat_files'));
 
   Future<Directory> downloadsDir() async {
@@ -86,7 +89,7 @@ class AppStorage {
 
   /// Removes everything tied to the signed-in account.
   Future<void> clearAll() async {
-    for (final f in [snapshotFile, notifyStateFile, chatsFile]) {
+    for (final f in [snapshotFile, notifyStateFile, chatsFile, automationFile]) {
       try {
         if (await f.exists()) await f.delete();
       } catch (_) {}

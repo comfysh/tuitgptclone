@@ -1,0 +1,177 @@
+{
+  "name": "TuitMate events",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tuitmate",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "9b0c6f0e-4c1e-4b8e-8a51-1f2d3c4b5a61",
+      "name": "TuitMate webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "webhookId": "5f0b5b8e-2a7e-4f0e-9a0c-7f6a3d9c1b22"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node — mode \"Run Once for All Items\", language JavaScript.\n// Put it right after the Webhook node that receives TuitMate events. Every\n// output item is { event, id, sent_at, source, payload, verified }; route on\n// `event` with a Switch node.\n//\n// Key: set the environment variable TUITMATE_KEY on your n8n server (the base64\n// key from TuitMate › Profile › Automation), or replace $env.TUITMATE_KEY below\n// with the key in quotes (only in a private workflow).\n// Self-hosted n8n must allow the crypto module: NODE_FUNCTION_ALLOW_BUILTIN=crypto\nconst crypto = require('crypto');\n\nconst keyText = String($env.TUITMATE_KEY || '').replace(/\\s+/g, '');\nconst KEY = /^[0-9a-fA-F]{64}$/.test(keyText)\n  ? Buffer.from(keyText, 'hex')\n  : Buffer.from(keyText.replace(/-/g, '+').replace(/_/g, '/'), 'base64');\nif (KEY.length !== 32) throw new Error('TUITMATE_KEY must be the 32-byte AES-256 key (base64)');\n\nreturn $input.all().map((item) => {\n  const env = item.json.body || item.json; // Webhook node puts the JSON body under \"body\"\n  if (env.v !== 1) throw new Error('Not a TuitMate event');\n  let opened;\n  let verified;\n  if (env.enc === 'A256GCM') {\n    // AES-256-GCM authenticates the payload and the readable fields (AAD).\n    const data = Buffer.from(env.data, 'base64');\n    const decipher = crypto.createDecipheriv('aes-256-gcm', KEY, Buffer.from(env.iv, 'base64'));\n    decipher.setAAD(Buffer.from(`tuitmate.v1|${env.id}|${env.event}|${env.sent_at}`, 'utf8'));\n    decipher.setAuthTag(data.subarray(data.length - 16));\n    opened = JSON.parse(Buffer.concat([decipher.update(data.subarray(0, data.length - 16)), decipher.final()]).toString('utf8'));\n    verified = true;\n  } else {\n    // Plain mode: check the HMAC signature. Exact only when the body has no\n    // decimal numbers; for a byte-exact check enable \"Raw Body\" on the Webhook node.\n    const header = (item.json.headers || {})['x-tuitmate-signature'] || '';\n    const expected = 'sha256=' + crypto.createHmac('sha256', KEY).update(JSON.stringify(env), 'utf8').digest('hex');\n    verified = header.length === expected.length && crypto.timingSafeEqual(Buffer.from(header), Buffer.from(expected));\n    opened = { v: 1, id: env.id, event: env.event, sent_at: env.sent_at, payload: env.payload };\n  }\n  return { json: { event: opened.event, id: opened.id, sent_at: opened.sent_at, source: env.source, payload: opened.payload, verified } };\n});\n"
+      },
+      "id": "2c7d5e41-7a0b-4d55-9e2f-6b1a8c3d4e52",
+      "name": "Open TuitMate event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 5,
+        "output": "={{ $json.event.startsWith('task.') ? 0 : $json.event === 'summary.daily' ? 1 : ($json.event.startsWith('exam.') || $json.event === 'absence.new') ? 2 : ($json.event === 'news.new' || $json.event === 'file.new') ? 3 : 4 }}"
+      },
+      "id": "7e3a1b9c-5d2f-4a6e-8c0b-3f4e5d6a7b83",
+      "name": "By event",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        480,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0a1b2c3d-1111-4a5b-8c6d-0e1f2a3b4c01",
+      "name": "Tasks (new, changed, graded, deadline soon)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        760,
+        -120
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0a1b2c3d-2222-4a5b-8c6d-0e1f2a3b4c02",
+      "name": "Daily summary",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        760,
+        40
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0a1b2c3d-3333-4a5b-8c6d-0e1f2a3b4c03",
+      "name": "Exams and attendance",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        760,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0a1b2c3d-4444-4a5b-8c6d-0e1f2a3b4c04",
+      "name": "News and new files",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        760,
+        360
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0a1b2c3d-5555-4a5b-8c6d-0e1f2a3b4c05",
+      "name": "Other (test, snapshot)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        760,
+        520
+      ]
+    }
+  ],
+  "connections": {
+    "TuitMate webhook": {
+      "main": [
+        [
+          {
+            "node": "Open TuitMate event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open TuitMate event": {
+      "main": [
+        [
+          {
+            "node": "By event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "By event": {
+      "main": [
+        [
+          {
+            "node": "Tasks (new, changed, graded, deadline soon)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Daily summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Exams and attendance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "News and new files",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Other (test, snapshot)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "note": "Replace the 'Other'/'Tasks'… No-op nodes with Telegram, email, Google Sheets, an AI agent, etc."
+  }
+}

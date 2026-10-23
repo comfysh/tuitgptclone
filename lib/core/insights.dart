@@ -9,16 +9,16 @@ import '../lms/snapshot.dart';
 
 /// Stable colour per subject (the LMS's own colour classes change between pages).
 const subjectPalette = [
-  Color(0xFF3C6EFF), // blue
-  Color(0xFF14B8A6), // teal
-  Color(0xFFF97316), // orange
-  Color(0xFF8B5CF6), // violet
-  Color(0xFFEC4899), // pink
-  Color(0xFF22C55E), // green
-  Color(0xFFEAB308), // amber
-  Color(0xFF06B6D4), // cyan
-  Color(0xFFEF4444), // red
-  Color(0xFF6366F1), // indigo
+  Color(0xFF2F6F9F), // blue ink
+  Color(0xFF2C7A6B), // teal ink
+  Color(0xFFB0662A), // ochre
+  Color(0xFF6E5A9C), // plum
+  Color(0xFF9F4C6B), // rose
+  Color(0xFF3E7D3A), // leaf green
+  Color(0xFF8A7A2C), // olive
+  Color(0xFF2E7F94), // petrol
+  Color(0xFFB4412F), // brick
+  Color(0xFF4B5394), // indigo
 ];
 
 Color subjectColor(int subjectId) => subjectPalette[subjectId.abs() % subjectPalette.length];
@@ -183,14 +183,14 @@ IconData fileKindIcon(FileKind k) => switch (k) {
     };
 
 Color fileKindColor(FileKind k) => switch (k) {
-      FileKind.pdf => const Color(0xFFE5484D),
-      FileKind.slides => const Color(0xFFF97316),
-      FileKind.doc => const Color(0xFF3C6EFF),
-      FileKind.sheet => const Color(0xFF22A06B),
-      FileKind.archive => const Color(0xFF8B5CF6),
-      FileKind.video => const Color(0xFFEC4899),
-      FileKind.image => const Color(0xFF06B6D4),
-      FileKind.other => const Color(0xFF64748B),
+      FileKind.pdf => const Color(0xFFB4412F),
+      FileKind.slides => const Color(0xFFB0662A),
+      FileKind.doc => const Color(0xFF2F6F9F),
+      FileKind.sheet => const Color(0xFF2E8B57),
+      FileKind.archive => const Color(0xFF6E5A9C),
+      FileKind.video => const Color(0xFF9F4C6B),
+      FileKind.image => const Color(0xFF2E7F94),
+      FileKind.other => const Color(0xFF6A665C),
     };
 
 /// A teacher file with where it comes from.

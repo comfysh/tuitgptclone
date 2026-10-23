@@ -726,10 +726,7 @@ class _TabsHeader extends SliverPersistentHeaderDelegate {
           decoration: BoxDecoration(
             color: cs.surface,
             borderRadius: BorderRadius.circular(radiusM),
-            border: dark ? Border.all(color: Colors.white.withValues(alpha: 0.06)) : null,
-            boxShadow: dark
-                ? null
-                : [BoxShadow(color: const Color(0xFF1B2559).withValues(alpha: 0.05), blurRadius: 14, offset: const Offset(0, 3))],
+            border: Border.all(color: dark ? Colors.white.withValues(alpha: 0.06) : cs.outlineVariant),
           ),
           child: TabBar(
             tabs: [for (final l in labels) Tab(height: 40, text: l)],

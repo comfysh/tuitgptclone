@@ -5,13 +5,15 @@ import 'package:provider/provider.dart';
 
 import 'app_state.dart';
 import 'core/format.dart';
+import 'services/desktop_tray.dart';
 import 'services/notifier.dart';
 import 'services/web_env.dart';
 import 'ui/home_shell.dart';
 import 'ui/nav.dart';
 import 'ui/welcome_screen.dart';
 
-Future<void> main() async {
+/// [args]: launch arguments; on Windows "--minimized" starts hidden in the tray.
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting();
   await WebEnv.init();
@@ -19,6 +21,8 @@ Future<void> main() async {
     await Notifier.init();
   } catch (_) {}
   final app = await AppState.create();
+  // Windows only (no-op elsewhere): tray icon, close-to-tray, hidden start.
+  await DesktopTray.init(app, args: args);
   runApp(MultiProvider(
     providers: [
       ChangeNotifierProvider.value(value: app),

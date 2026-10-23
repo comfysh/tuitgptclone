@@ -9,8 +9,9 @@
 **[⬇ Download the latest version](https://github.com/comfysh/tuitgptclone/releases/latest)**: `TuitMate-<version>.apk` for Android,
 `TuitMate-<version>-Setup.exe` for Windows.
 
-TuitMate is a personal, **unofficial** companion for [lms.tuit.uz](https://lms.tuit.uz), similar to TuitGPT.
-It shows everything from your LMS in a fast, clean app, sends notifications, and adds an AI study assistant.
+TuitMate is a personal, **unofficial** companion for [lms.tuit.uz](https://lms.tuit.uz): your day as a calm
+agenda, everything from your LMS in one place, quiet notifications that work without opening the app, an AI study
+assistant with the provider of your choice, and encrypted automation for n8n.
 
 > Not affiliated with TUIT. It reads the same pages you see after signing in to LMS,
 > and only writes to LMS when **you** upload an answer.
@@ -21,7 +22,7 @@ It shows everything from your LMS in a fast, clean app, sends notifications, and
   <img src="docs/screenshots/phone-grades.png" width="200" alt="Grades and GPA">
   <img src="docs/screenshots/phone-dark.png" width="200" alt="Dark theme">
 </p>
-<img src="docs/screenshots/pc-courses.png" width="680" alt="TuitMate on Windows">
+<img src="docs/screenshots/pc-today.png" width="680" alt="TuitMate on Windows">
 
 *(Screenshots use sample data.)*
 
@@ -29,7 +30,7 @@ It shows everything from your LMS in a fast, clean app, sends notifications, and
 
 | | |
 |---|---|
-| **Today** | Current / next class with a countdown ring, today's classes with breaks, nearest deadlines, open tasks, NB hours, GPA, average rating, next exam, tuition debt |
+| **Today** | Your day as an **agenda**: classes, free time between them, tasks due today and exams, with a red *now* line and a countdown. Then what is due in the coming days, open tasks, NB hours, GPA, average rating, tomorrow's classes, the next exam and tuition debt. |
 | **Schedule** | Week strip with dates on phones, a full **weekly grid** on PC. **Odd / even weeks** (*toq / juft*) handled automatically; tap the week tag to correct it. Classes you missed are marked **NB**. Lesson topics for that date come from the course calendar. |
 | **Tasks** | Every assignment grouped by *overdue / today / tomorrow / this week / later / waiting for grade / graded*, with search and course filters. The task sheet shows the criteria, the teacher's file, your answer and the grade. **Upload your answer (≤ 50 MB)** straight from your phone or PC. |
 | **Courses** | Rating per course and the grade it is heading for (from the work graded so far, so tasks that aren't due yet don't drag it down), a **grade forecast** (how many points you still need for a 3, 4 or 5), lectures / practicals / labs with **teacher files** and your NBs, and the written exam questions. |
@@ -39,10 +40,11 @@ It shows everything from your LMS in a fast, clean app, sends notifications, and
 | **Exams** | Exam date, time, room and format with a live countdown, results, test points, written questions. |
 | **News** | LMS news with a full article view. |
 | **Home-screen widget** (Android) | *TuitMate · Today*: the current or next class, the nearest deadline, today's classes, open tasks and NB hours. Updates itself at each class start and end, even when the app is closed. |
-| **Notifications** | New assignment, changed deadline, new grade, exam result or change, new absence, new teacher file, news, deadline reminders (24 h and 3 h before), optional "class in 10 minutes" reminders. On Android checks run in the background every 15–120 min, even when the app is closed. On Windows they run while the app is open. |
-| **AI assistant** | A chat that knows your timetable, deadlines, grades, attendance and exams. Attach PDFs, Word, PowerPoint, Excel, images or text, or tap **Ask AI** on any teacher file or assignment. Replies support formulas (LaTeX) and code. |
+| **Notifications** | New assignment, changed deadline, new grade, exam result or change, new absence, new teacher file, news, deadline reminders (24 h and 3 h before), optional "class in 10 minutes" reminders. **Not annoying:** quiet hours (silent at night), several updates arrive as one notification, a morning brief with today's classes and deadlines, and you pick which kinds notify you. **No need to open the app:** on Android checks run in the background every 15–120 min, and when LMS ends the session TuitMate signs in again by itself (with *Remember password*). On Windows TuitMate keeps running in the **system tray**. |
+| **AI assistant** | A chat that knows your timetable, deadlines, grades, attendance and exams. Attach PDFs, Word, PowerPoint, Excel, images or text, or tap **Ask AI** on any teacher file or assignment. Replies support formulas (LaTeX) and code. Works with **Gemini, DeepSeek, OpenRouter, Groq, Mistral, OpenAI, Together, xAI, local models (Ollama / LM Studio)** or any OpenAI-compatible API. |
 | **Ask in ChatGPT** | You have ChatGPT Plus but no API key, so this button copies your question **together with your LMS context**, then opens ChatGPT (browser or app) so you can paste it there. |
 | **LMS website** | The full lms.tuit.uz inside the app, already signed in, for anything not covered above. |
+| **Automation** (owner only) | Sends your LMS events (new tasks, deadlines, grades, NB, exams, files, news, a daily summary) to your own **n8n** workflow or server, **encrypted with AES-256-GCM** and signed. Includes a ready n8n workflow and a guide you can give to ChatGPT or Codex: [docs/AUTOMATION.md](docs/AUTOMATION.md). |
 | Languages | O'zbekcha, Русский, English · light / dark theme |
 
 ## Install
@@ -64,7 +66,8 @@ All files are on the [**Releases**](https://github.com/comfysh/tuitgptclone/rele
 A new version installs over the old one and keeps your data (as long as it is signed with the same key, see below).
 
 ### Windows 10 / 11
-- **Installer:** run `TuitMate-<version>-Setup.exe`. It installs for your user only, so no admin rights are needed. Tick *Start with Windows* if you want notifications all day.
+- **Installer:** run `TuitMate-<version>-Setup.exe`. It installs for your user only, so no admin rights are needed. Tick *Start with Windows* if you want notifications all day: TuitMate then starts hidden in the system tray.
+- Closing the window keeps TuitMate in the tray (turn this off in *Profile › Notifications*). Right-click the tray icon to quit.
 - **Portable:** unzip `TuitMate-<version>-windows-portable.zip` anywhere and run `TuitMate.exe`.
 - The app is not code-signed, so Windows may say *"Windows protected your PC"*: choose **More info → Run anyway**.
 - Login uses Microsoft Edge WebView2, which Windows 10/11 already include. If login shows a blank page, install the *WebView2 Runtime* from Microsoft.
@@ -83,16 +86,23 @@ Compare the file's SHA-256 with `SHA256SUMS.txt` from the same release:
 > Why the in-app login page? LMS protects login with Google reCAPTCHA. Signing in on the real page
 > lets reCAPTCHA work normally instead of bypassing it.
 
-## Set up the free AI (2 minutes)
+## Set up the AI (2 minutes)
 
-ChatGPT Plus doesn't include API access, so the built-in assistant uses **Google Gemini**, which has a free tier:
+ChatGPT Plus doesn't include API access, so the built-in assistant uses an API key. **Google Gemini** has a free tier:
 
 1. Open <https://aistudio.google.com/apikey> and sign in with any Google account.
 2. Click **Create API key** and copy it.
 3. In TuitMate, open **AI → Settings** (or the setup card on the AI tab), paste the key, then **Save** → **Test**.
 
 You can change the model in *AI settings → Load models*. The default is `gemini-flash-latest`.
-Other providers work too: **Groq** (free tier), **OpenRouter**, **OpenAI**, or any OpenAI-compatible API.
+
+Other providers: pick one in *AI settings*, paste its key, **Save** → **Test**.
+- **DeepSeek**: key from <https://platform.deepseek.com/api_keys> (pay-as-you-go, very cheap).
+- **Groq** (free tier), **OpenRouter** (some free models), **Mistral**, **OpenAI**, **Together**, **xAI**.
+- **Local**: Ollama or LM Studio on your PC, no key needed.
+- **Custom**: any OpenAI-compatible API (base URL + key).
+
+Each provider keeps its own key and model, so you can switch back and forth.
 Only Gemini reads PDFs directly. Word, PowerPoint, Excel and text files work with every provider.
 
 ## Getting the builds
@@ -103,8 +113,8 @@ The repo includes `.github/workflows/build.yml`:
 - **Releases are automatic:** when `main` has a version that has no release yet, the workflow publishes
   release `v<version>` with the APK, the Windows installer, the portable zip, `SHA256SUMS.txt` and the notes
   from [CHANGELOG.md](CHANGELOG.md). To publish a new version:
-  1. add a `## [1.0.1] - date` section to `CHANGELOG.md`,
-  2. set `version: 1.0.1+2` in `pubspec.yaml` and `appVersion = '1.0.1'` in `lib/core/version.dart`
+  1. add a `## [1.1.1] - date` section to `CHANGELOG.md`,
+  2. set `version: 1.1.1+3` in `pubspec.yaml` and `appVersion = '1.1.1'` in `lib/core/version.dart`
      (a test checks that they match),
   3. push to `main`.
 - **Rebuild a release** (for example after adding the signing key below): **Actions → Build apps → Run workflow**
@@ -150,12 +160,14 @@ lib/
   lms/        LMS client (session cookies, endpoints), HTML/JSON parsers, data snapshot, change detection
   core/       settings, storage (cache + keystore), timetable/odd-even week + attendance math, grade forecast and
               expected grade, file library, texts (uz/ru/en), formatting
-  services/   notifications, Android background checks (WorkManager), Android home-screen widget data
-  ai/         Gemini / OpenAI-compatible streaming, LMS context for the AI, file text extraction, chat history
+  services/   notifications, background checks (WorkManager) and background sign-in, Windows tray,
+              Android home-screen widget data, automation (encrypted webhooks)
+  ai/         AI providers (Gemini, DeepSeek, OpenAI-compatible), streaming, LMS context, file text, chat history
   ui/         design system (design.dart, cards.dart) and screens (Today, Schedule, Tasks, Courses, Grades & GPA,
               Attendance, Exams, Files, News, AI, Profile/Settings, LMS website)
 android/…/TuitWidgetProvider.kt   the home-screen widget
 test/         parser and logic tests, and every screen rendered at phone / PC size and in dark mode (flutter test)
+docs/AUTOMATION.md, docs/automation/   automation guide, n8n workflow, Node.js / Python decoders
 ```
 
 ## If something looks wrong
@@ -168,9 +180,10 @@ LMS sometimes changes its pages. Each screen has an **Open in LMS** button (🌐
 - Your LMS password and AI keys are kept in the OS keystore and never sent anywhere except lms.tuit.uz (password) or the AI provider you chose (key).
 - Your LMS data is cached on your device for offline use.
 - The AI only receives your LMS summary when **Use my LMS data** is on (AI tab → ⋮ menu).
-- **Sign out** (Profile) deletes the cached data, chats, saved password, AI keys and the widget's data.
+- Automation events go only to the webhook URL you set, encrypted with your own key.
+- **Sign out** (Profile) deletes the cached data, chats, saved password, AI keys, the automation key and the widget's data.
 - More in [SECURITY.md](SECURITY.md), including how to report a security problem privately.
 
 ## License
 
-[MIT](LICENSE). The Inter font is under the SIL Open Font License 1.1. TuitMate is unofficial and not affiliated with TUIT.
+[MIT](LICENSE). The Inter and Source Serif 4 fonts are under the SIL Open Font License 1.1. TuitMate is unofficial and not affiliated with TUIT.
