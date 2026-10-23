@@ -118,6 +118,9 @@ class Secrets {
   static const geminiKey = 'gemini_key';
   static const openaiKey = 'openai_key';
 
+  /// The owner's AES-256 automation key (base64), after admin unlock.
+  static const adminKey = 'admin_key';
+
   static Future<String?> read(String k) async {
     try {
       return await _s.read(key: k);
@@ -141,9 +144,14 @@ class Secrets {
     await write(lmsPassword, null);
   }
 
+  /// Sign-out: every secret (LMS, all AI provider keys, the automation key).
   static Future<void> deleteAll() async {
     await deleteLms();
     await write(geminiKey, null);
     await write(openaiKey, null);
+    await write(adminKey, null);
+    try {
+      await _s.deleteAll();
+    } catch (_) {}
   }
 }

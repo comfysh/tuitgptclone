@@ -78,6 +78,59 @@ class Settings {
   bool get remindClasses => _p.getBool('remindClasses') ?? false;
   set remindClasses(bool v) => _p.setBool('remindClasses', v);
 
+  /// Quiet hours: notifications still arrive, but without sound or vibration.
+  bool get quietHours => _p.getBool('quietHours') ?? true;
+  set quietHours(bool v) => _p.setBool('quietHours', v);
+
+  /// Minutes after midnight.
+  int get quietFrom => _p.getInt('quietFrom') ?? 22 * 60 + 30;
+  set quietFrom(int v) => _p.setInt('quietFrom', v);
+
+  int get quietTo => _p.getInt('quietTo') ?? 7 * 60;
+  set quietTo(int v) => _p.setInt('quietTo', v);
+
+  /// One morning summary of the day (classes and what is due).
+  bool get morningBrief => _p.getBool('morningBrief') ?? true;
+  set morningBrief(bool v) => _p.setBool('morningBrief', v);
+
+  int get briefAt => _p.getInt('briefAt') ?? 7 * 60 + 30;
+  set briefAt(int v) => _p.setInt('briefAt', v);
+
+  /// Change kinds (ChangeKind.name) the user turned off. New teacher files are
+  /// frequent, so they start off.
+  Set<String> get mutedKinds => (_p.getStringList('mutedKinds') ?? const ['newFile']).toSet();
+  set mutedKinds(Set<String> v) => _p.setStringList('mutedKinds', v.toList()..sort());
+
+  // ---- staying signed in
+  /// Sign in again with the saved password when LMS ends the session, also in
+  /// the background (Android) or while the app sits in the tray (Windows).
+  bool get backgroundLogin => _p.getBool('backgroundLogin') ?? true;
+  set backgroundLogin(bool v) => _p.setBool('backgroundLogin', v);
+
+  /// Windows: closing the window keeps TuitMate running in the system tray.
+  bool get closeToTray => _p.getBool('closeToTray') ?? true;
+  set closeToTray(bool v) => _p.setBool('closeToTray', v);
+
+  // ---- automation (admin only, see lib/services/automation.dart)
+  bool get adminUnlocked => _p.getBool('adminUnlocked') ?? false;
+  set adminUnlocked(bool v) => _p.setBool('adminUnlocked', v);
+
+  String? get webhookUrl => _p.getString('webhookUrl');
+  set webhookUrl(String? v) => v == null || v.trim().isEmpty ? _p.remove('webhookUrl') : _p.setString('webhookUrl', v.trim());
+
+  /// Event types (e.g. "task.new") sent to the webhook; null = all of them.
+  Set<String>? get webhookEvents => _p.getStringList('webhookEvents')?.toSet();
+  set webhookEvents(Set<String>? v) =>
+      v == null ? _p.remove('webhookEvents') : _p.setStringList('webhookEvents', v.toList()..sort());
+
+  /// Encrypt webhook payloads with AES-256-GCM (off = plain JSON, still signed).
+  bool get webhookEncrypt => _p.getBool('webhookEncrypt') ?? true;
+  set webhookEncrypt(bool v) => _p.setBool('webhookEncrypt', v);
+
+  /// Also send the whole snapshot after every sync (large; off by default).
+  bool get webhookSnapshot => _p.getBool('webhookSnapshot') ?? false;
+  set webhookSnapshot(bool v) => _p.setBool('webhookSnapshot', v);
+
   // ---- login
   bool get rememberPassword => _p.getBool('rememberPassword') ?? true;
   set rememberPassword(bool v) => _p.setBool('rememberPassword', v);
