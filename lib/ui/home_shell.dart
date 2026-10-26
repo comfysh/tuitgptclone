@@ -46,6 +46,10 @@ class _HomeShellState extends State<HomeShell> {
   DateTime? _lastAutoLogin;
   bool _autoLoginOpen = false;
 
+  /// The login page was already shown for the session that ended last; the
+  /// next time only after a sign-in worked (the banner stays meanwhile).
+  bool _shownForThisExpiry = false;
+
   /// Keeps all tabs (and a running AI reply) alive when the layout switches
   /// between phone and PC width.
   final _stackKey = GlobalKey();
@@ -74,6 +78,9 @@ class _HomeShellState extends State<HomeShell> {
     _app = context.read<AppState>();
     _app.addListener(_onApp);
     _nav = context.read<NavController>();
+    // The place chosen in "Customize Today" (Today unless changed).
+    final start = Hub.values.where((h) => h.name == _app.settings.startHub).firstOrNull;
+    if (start != null && start != Hub.today && _nav.current == Dest.today) _nav.current = hubInfo[start]!.sections.first;
     Notifier.onTap = _openRoute;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (_app.loggedIn) {
@@ -109,11 +116,18 @@ class _HomeShellState extends State<HomeShell> {
 
   /// When the LMS session expires and a password is saved, sign in again
   /// automatically through the real login page.
+  /// When LMS ended the session and the invisible sign-in could not renew it,
+  /// opens the real login page once, filled in and submitted by itself.
   Future<void> _onApp() async {
-    if (!_app.sessionExpired || !_app.settings.autoLogin || _autoLoginOpen) return;
+    if (!_app.sessionExpired) {
+      _shownForThisExpiry = false;
+      return;
+    }
+    if (!_app.settings.autoLogin || _autoLoginOpen || _shownForThisExpiry) return;
     final now = DateTime.now();
     if (_lastAutoLogin != null && now.difference(_lastAutoLogin!) < const Duration(minutes: 15)) return;
     _lastAutoLogin = now;
+    _shownForThisExpiry = true;
     final pass = await Secrets.read(Secrets.lmsPassword);
     if (pass == null || !mounted) return;
     _autoLoginOpen = true;
@@ -380,7 +394,7 @@ class _Sidebar extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(color: cs.onSurface, borderRadius: BorderRadius.circular(radiusS)),
             child: Text('T',
-                style: TextStyle(fontFamily: serif, fontSize: 22, fontWeight: FontWeight.w700, color: cs.surface, height: 1)),
+                style: TextStyle(fontFamily: brandFont, fontSize: 22, fontWeight: FontWeight.w700, color: cs.surface, height: 1)),
           ),
           if (!compact) ...[
             const SizedBox(width: 10),
@@ -389,7 +403,7 @@ class _Sidebar extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.fade,
                   softWrap: false,
-                  style: TextStyle(fontFamily: serif, fontSize: 22, fontWeight: FontWeight.w700, color: cs.onSurface)),
+                  style: TextStyle(fontFamily: brandFont, fontSize: 22, fontWeight: FontWeight.w700, color: cs.onSurface)),
             ),
             Container(
                 width: 6,

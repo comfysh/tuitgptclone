@@ -23,6 +23,8 @@ import 'strings/desktop.dart';
 import 'strings/notify.dart';
 import 'strings/automation.dart';
 import 'strings/hub.dart';
+import 'strings/sync.dart';
+import 'strings/look.dart';
 
 class S {
   final String lang;
@@ -48,7 +50,7 @@ class S {
   }
 
   /// Texts added per screen area (lib/core/strings/*.dart).
-  static const _areas = [todayStrings, scheduleStrings, tasksStrings, coursesStrings, attendanceStrings, examsStrings, gradesStrings, profileStrings, filesStrings, newsStrings, chatStrings, welcomeStrings, widgetStrings, aiStrings, desktopStrings, notifyStrings, automationStrings, hubStrings];
+  static const _areas = [todayStrings, scheduleStrings, tasksStrings, coursesStrings, attendanceStrings, examsStrings, gradesStrings, profileStrings, filesStrings, newsStrings, chatStrings, welcomeStrings, widgetStrings, aiStrings, desktopStrings, notifyStrings, automationStrings, hubStrings, syncStrings, lookStrings];
 
   String f(String key, Map<String, Object?> args) {
     var s = this[key];

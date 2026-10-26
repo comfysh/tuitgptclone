@@ -17,6 +17,10 @@ class LmsSnapshot {
   List<Discipline> studyPlan;
   List<NewsItem> news;
   DateTime? updatedAt;
+
+  /// Last sync that also loaded teacher files, profile and study plan (a
+  /// "light" check skips those; see [needsFullSync]).
+  DateTime? fullAt;
   Map<String, String> errors;
 
   /// Monday of a week whose odd/even side the LMS told us, and that side.
@@ -42,6 +46,7 @@ class LmsSnapshot {
     this.studyPlan = const [],
     this.news = const [],
     this.updatedAt,
+    this.fullAt,
     this.errors = const {},
     this.weekRefMonday,
     this.weekRefSide,
@@ -80,6 +85,7 @@ class LmsSnapshot {
         'studyPlan': studyPlan.map((e) => e.toJson()).toList(),
         'news': news.map((e) => e.toJson()).toList(),
         'updatedAt': updatedAt?.toIso8601String(),
+        'fullAt': fullAt?.toIso8601String(),
         'errors': errors,
         'weekRefMonday': weekRefMonday?.toIso8601String(),
         'weekRefSide': weekRefSide?.value,
@@ -105,6 +111,7 @@ class LmsSnapshot {
         studyPlan: _list(j['studyPlan'], Discipline.fromJson),
         news: _list(j['news'], NewsItem.fromJson),
         updatedAt: j['updatedAt'] == null ? null : DateTime.tryParse(j['updatedAt']),
+        fullAt: j['fullAt'] == null ? null : DateTime.tryParse(j['fullAt']),
         errors: Map<String, String>.from(j['errors'] ?? const {}),
         weekRefMonday: j['weekRefMonday'] == null ? null : DateTime.tryParse(j['weekRefMonday']),
         weekRefSide: j['weekRefSide'] == null ? null : WeekSide.fromValue(j['weekRefSide']),
@@ -227,6 +234,18 @@ Future<LmsSnapshot> fetchSnapshot(
     studyPlan: planRes.$1,
     news: results[6] as List<NewsItem>,
     updatedAt: DateTime.now(),
+    fullAt: full ? DateTime.now() : (prev.semesterId == sid ? prev.fullAt : null),
     errors: errors,
   );
+}
+
+/// How old the teacher files, profile and study plan may get before a light
+/// check loads everything again.
+const fullSyncEvery = Duration(minutes: 60);
+
+/// Whether the next sync should load everything (also teacher files, profile
+/// and study plan), not just the parts that change during the day.
+bool needsFullSync(LmsSnapshot s, DateTime now) {
+  final at = s.fullAt;
+  return at == null || now.difference(at) >= fullSyncEvery || now.isBefore(at);
 }

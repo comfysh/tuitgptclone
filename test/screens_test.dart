@@ -30,12 +30,15 @@ import 'package:tuitmate/ui/deadlines_screen.dart';
 import 'package:tuitmate/ui/exams_screen.dart';
 import 'package:tuitmate/ui/files_screen.dart';
 import 'package:tuitmate/ui/grades_screen.dart';
+import 'package:tuitmate/ui/design.dart' show Brand, AppStyle, AppCard;
 import 'package:tuitmate/ui/home_shell.dart';
 import 'package:tuitmate/ui/inbox_screen.dart';
 import 'package:tuitmate/ui/nav.dart';
 import 'package:tuitmate/ui/news_screen.dart';
 import 'package:tuitmate/ui/schedule_screen.dart';
 import 'package:tuitmate/ui/settings_screen.dart';
+import 'package:tuitmate/ui/theme_picker.dart';
+import 'package:tuitmate/ui/today_layout.dart';
 import 'package:tuitmate/ui/today_screen.dart';
 import 'package:tuitmate/ui/welcome_screen.dart';
 import 'package:tuitmate/ui/widgets.dart' show HubTabs;
@@ -211,6 +214,10 @@ void main() {
     'shell_inbox': () => const _StartAt(Dest.inbox, HomeShell()),
     'shell_study': () => const _StartAt(Dest.grades, HomeShell()),
     'ask': () => _AutoOpen(AskPalette.open),
+    'theme_picker': () => _AutoOpen(showThemePicker),
+    'today_customizer': () => _AutoOpen(showTodayCustomizer),
+    'today_all': () => const _AllSections(TodayScreen()),
+    'shell_start_inbox': () => const _StartHub('inbox', HomeShell()),
   };
 
   // Phone, small phone, PC; plus dark mode on a phone.
@@ -244,6 +251,38 @@ void main() {
         // Screenshots are only written with --update-goldens (data depends on today's date).
         if (autoUpdateGoldenFiles) {
           await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/$name.png'));
+        }
+        await tester.pumpWidget(const SizedBox());
+        app.dispose();
+      });
+    }
+  }
+
+  // Every theme, light and dark, the way the app applies it (see main.dart).
+  for (final style in AppStyle.values) {
+    for (final b in Brightness.values) {
+      testWidgets('theme_${style.name}_${b.name}', (tester) async {
+        tester.view.physicalSize = const Size(412, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        addTearDown(() => Brand.apply(AppStyle.paper, Brightness.light));
+        await tester.pumpWidget(MultiProvider(
+          providers: [ChangeNotifierProvider.value(value: app), ChangeNotifierProvider(create: (_) => NavController())],
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: buildTheme(b, style: style),
+            builder: (context, child) {
+              Brand.apply(style, b);
+              return child!;
+            },
+            home: const _StartAt(Dest.grades, HomeShell()),
+          ),
+        ));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(tester.takeException(), isNull);
+        if (autoUpdateGoldenFiles) {
+          await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/theme_${style.name}_${b.name}.png'));
         }
         await tester.pumpWidget(const SizedBox());
         app.dispose();
@@ -333,6 +372,77 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     app.dispose();
   });
+
+  testWidgets('Customize Today: switch a section off, drag to reorder; the start page', (tester) async {
+    Future<void> settle() async {
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    final nav = await pumpApp(tester, _AutoOpen(showTodayCustomizer));
+    await settle();
+    final s = S('uz');
+    // Tomorrow off.
+    final row = find.ancestor(of: find.text(s['tdTomorrow']), matching: find.byType(AppCard));
+    await tester.tap(find.descendant(of: row, matching: find.byType(Switch)));
+    await settle();
+    expect(app.settings.todayLayout, contains('-tomorrow'));
+    // Drag the agenda (first) below the next two sections.
+    await tester.drag(find.byIcon(Icons.drag_indicator_rounded).first, const Offset(0, 140));
+    await settle();
+    final layout = todayLayout(app.settings);
+    expect(layout.first.$1, isNot(TodaySection.agenda));
+    expect(layout.map((e) => e.$1).toSet(), TodaySection.values.toSet()); // nothing lost or doubled
+    // Opens on Plan.
+    await tester.tap(find.text(s['hubPlan']));
+    await settle();
+    expect(app.settings.startHub, 'plan');
+    expect(nav.current, Dest.today); // takes effect at the next start
+    await tester.pumpWidget(const SizedBox());
+    app.dispose();
+  });
+
+  test('Today layout: saved order, hidden sections, unknown and new names', () async {
+    expect(todayLayout(app.settings).where((e) => e.$2).map((e) => e.$1), [
+      TodaySection.agenda, TodaySection.whatsNew, TodaySection.due, TodaySection.numbers,
+      TodaySection.nextExam, TodaySection.debt, TodaySection.tomorrow,
+    ]);
+    app.settings.todayLayout = ['due', '-agenda', 'gone', 'news', 'due'];
+    final l = todayLayout(app.settings);
+    expect(l.take(3), [(TodaySection.due, true), (TodaySection.agenda, false), (TodaySection.news, true)]);
+    expect(l, hasLength(TodaySection.values.length)); // the rest joins at the end
+    expect(l.last, (TodaySection.attendance, false)); // with its default
+    saveTodayLayout(app.settings, null);
+    expect(app.settings.todayLayout, isNull);
+  });
+
+}
+
+/// Today with every section switched on, in the default order.
+class _AllSections extends StatelessWidget {
+  const _AllSections(this.child);
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.read<AppState>().settings;
+    settings.todayLayout = [for (final t in TodaySection.values) t.name];
+    return child;
+  }
+}
+
+/// The home shell with "Opens on" set to [hub].
+class _StartHub extends StatelessWidget {
+  const _StartHub(this.hub, this.child);
+  final String hub;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    context.read<AppState>().settings.startHub = hub;
+    return child;
+  }
 }
 
 /// Opens [child] (the home shell) on [dest] instead of Today.

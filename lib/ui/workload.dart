@@ -11,7 +11,10 @@ import 'widgets.dart';
 /// (open tasks in green ink, exams in plum), with the busiest week named.
 /// Columns are labelled with the week's Monday; this week is underlined.
 class WorkloadCard extends StatelessWidget {
-  const WorkloadCard({super.key});
+  const WorkloadCard({super.key, this.onToday = false});
+
+  /// On Today it sits among other sections (normal spacing above its title).
+  final bool onToday;
 
   static const _barMax = 64.0;
 
@@ -92,7 +95,7 @@ class WorkloadCard extends StatelessWidget {
         ]);
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      SectionHeader(s['wlTitle'], padding: const EdgeInsets.fromLTRB(2, 4, 2, 8)),
+      SectionHeader(s['wlTitle'], padding: onToday ? null : const EdgeInsets.fromLTRB(2, 4, 2, 8)),
       AppCard(
         padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -116,7 +119,7 @@ class WorkloadCard extends StatelessWidget {
           ),
         ]),
       ),
-      const SizedBox(height: 14),
+      if (!onToday) const SizedBox(height: 14),
     ]);
   }
 }

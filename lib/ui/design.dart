@@ -6,71 +6,104 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Colours of the "paper" look: warm paper, ink-black text and one green
-/// accent. Status colours are muted inks, not neon.
+import 'themes.dart';
+
+export 'themes.dart' show AppStyle, styleSpecs, styleById;
+
+/// Colours shared by every screen. The accent, paper and ink follow the
+/// chosen theme ([apply], from the app's builder); the status colours are the
+/// same muted inks in every theme.
 class Brand {
-  static const primary = Color(0xFF1E7A53); // green ink (accent)
-  static const primaryDeep = Color(0xFF155C3E);
+  static Color primary = const Color(0xFF1E7A53);
+  static Color primaryDeep = const Color(0xFF155C3E);
   static const violet = Color(0xFF6E5A9C); // plum ink
   static const success = Color(0xFF2E8B57);
   static const warning = Color(0xFFB7791F); // ochre
   static const danger = Color(0xFFB4412F); // brick red
   static const info = Color(0xFF2B6CB0); // blue ink
 
-  static const ink = Color(0xFF1C1B17);
-  static const paper = Color(0xFFF6F4EE);
-  static const paperCard = Color(0xFFFFFDF8);
-  static const line = Color(0xFFE3DED2);
-  static const inkMuted = Color(0xFF6A665C);
+  static Color ink = const Color(0xFF1C1B17);
+  static Color paper = const Color(0xFFF6F4EE);
+  static Color paperCard = const Color(0xFFFFFDF8);
+  static Color line = const Color(0xFFE3DED2);
+  static Color inkMuted = const Color(0xFF6A665C);
 
-  // The paper look has no gradients: these stay as flat fills so screens that
-  // ask for a "gradient" get a solid colour block.
-  static const hero = LinearGradient(colors: [ink, ink]);
-  static const heroDark = LinearGradient(colors: [Color(0xFF1F3A2D), Color(0xFF1F3A2D)]);
+  /// Title font of the theme: the serif, or Inter.
+  static String titleFont = brandFont;
+
+  static Color _heroLight = const Color(0xFF1C1B17);
+  static Color _heroDark = const Color(0xFF1F3A2D);
+
+  // No gradients in these themes: "gradients" are flat two-colour fills, so
+  // screens that ask for one get a solid block.
+  static LinearGradient get hero => LinearGradient(colors: [_heroLight, _heroLight]);
+  static LinearGradient get heroDark => LinearGradient(colors: [_heroDark, _heroDark]);
   static const sunrise = LinearGradient(colors: [Color(0xFF8C3A26), Color(0xFF8C3A26)]);
-  static const mint = LinearGradient(colors: [primaryDeep, primaryDeep]);
+  static LinearGradient get mint => LinearGradient(colors: [primaryDeep, primaryDeep]);
 
-  static LinearGradient heroFor(BuildContext c) =>
-      Theme.of(c).brightness == Brightness.dark ? heroDark : hero;
+  static LinearGradient heroFor(BuildContext c) => Theme.of(c).brightness == Brightness.dark ? heroDark : hero;
+
+  /// Uses [style] for the shared colours; [b] is the brightness on screen.
+  static void apply(AppStyle style, Brightness b, {bool pureBlack = false}) {
+    final spec = styleSpecs[style]!;
+    final p = spec.of(b, pureBlack: pureBlack);
+    primary = p.accent;
+    primaryDeep = Color.lerp(p.accent, b == Brightness.dark ? Colors.white : Colors.black, 0.25)!;
+    ink = p.ink;
+    paper = p.bg;
+    paperCard = p.card;
+    line = p.line;
+    inkMuted = p.muted;
+    titleFont = spec.serifTitles ? brandFont : 'Inter';
+    _heroLight = spec.light.hero;
+    _heroDark = spec.of(Brightness.dark, pureBlack: pureBlack).hero;
+  }
 }
 
 const radiusL = 14.0;
 const radiusM = 12.0;
 const radiusS = 8.0;
 
-/// Serif for page titles and big numbers; Inter for everything else.
-const serif = 'SourceSerif';
+/// The serif: the TuitMate wordmark, and titles in themes that use it.
+const brandFont = 'SourceSerif';
+
+/// Font for page titles and big numbers in the current theme.
+String get serif => Brand.titleFont;
 
 /// Times and counts line up in columns.
 const tabular = [FontFeature.tabularFigures()];
 
-ThemeData buildAppTheme(Brightness b) {
+ThemeData buildAppTheme(Brightness b, {AppStyle style = AppStyle.paper, bool pureBlack = false}) {
   final dark = b == Brightness.dark;
-  final ink = dark ? const Color(0xFFECE9E0) : Brand.ink;
-  final muted = dark ? const Color(0xFFA29E92) : Brand.inkMuted;
-  final line = dark ? const Color(0xFF2E2F29) : Brand.line;
-  final card = dark ? const Color(0xFF1B1C18) : Brand.paperCard;
-  final bg = dark ? const Color(0xFF121310) : Brand.paper;
-  final accent = dark ? const Color(0xFF6CC79A) : Brand.primary;
-  final scheme = ColorScheme.fromSeed(seedColor: Brand.primary, brightness: b).copyWith(
+  final spec = styleSpecs[style]!;
+  final p = spec.of(b, pureBlack: pureBlack);
+  final ink = p.ink, muted = p.muted, line = p.line, card = p.card, bg = p.bg, accent = p.accent;
+  final titles = spec.serifTitles ? brandFont : 'Inter';
+  final scheme = ColorScheme.fromSeed(seedColor: spec.light.accent, brightness: b).copyWith(
     primary: accent,
-    onPrimary: dark ? const Color(0xFF0E2A1D) : Colors.white,
-    primaryContainer: dark ? const Color(0xFF1F3A2D) : const Color(0xFFE3F0E8),
-    onPrimaryContainer: dark ? const Color(0xFFCDEBDB) : const Color(0xFF0F3D28),
-    secondary: dark ? const Color(0xFFC8B98F) : const Color(0xFF7A6A43),
+    onPrimary: p.onAccent,
+    primaryContainer: p.accentSoft,
+    onPrimaryContainer: p.onAccentSoft,
+    secondary: p.secondary,
     surface: card,
     onSurface: ink,
     onSurfaceVariant: muted,
-    surfaceContainerHighest: dark ? const Color(0xFF26271F) : const Color(0xFFEFEBE2),
-    surfaceContainer: dark ? const Color(0xFF1F201B) : const Color(0xFFF2EFE7),
-    outline: dark ? const Color(0xFF6E6A60) : const Color(0xFF9A958A),
+    surfaceContainerHighest: p.high,
+    surfaceContainer: p.container,
+    outline: p.outline,
     outlineVariant: line,
     error: Brand.danger,
   );
   final base = ThemeData(colorScheme: scheme, useMaterial3: true, fontFamily: 'Inter', brightness: b);
   final t = base.textTheme;
+  // Serif titles are bold; Inter titles a little heavier and tighter.
   TextStyle serifStyle(TextStyle? s, double size, {FontWeight w = FontWeight.w700, double ls = -0.3}) =>
-      (s ?? const TextStyle()).copyWith(fontFamily: serif, fontSize: size, fontWeight: w, letterSpacing: ls, color: ink);
+      (s ?? const TextStyle()).copyWith(
+          fontFamily: titles,
+          fontSize: spec.serifTitles ? size : size - 1,
+          fontWeight: spec.serifTitles ? w : FontWeight.w800,
+          letterSpacing: spec.serifTitles ? ls : ls - 0.2,
+          color: ink);
   return base.copyWith(
     scaffoldBackgroundColor: bg,
     canvasColor: bg,
@@ -92,7 +125,7 @@ ThemeData buildAppTheme(Brightness b) {
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      titleTextStyle: TextStyle(fontFamily: serif, fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: ink),
+      titleTextStyle: serifStyle(null, 26, ls: -0.5),
     ),
     cardTheme: CardThemeData(
       elevation: 0,
@@ -180,8 +213,8 @@ ThemeData buildAppTheme(Brightness b) {
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: dark ? const Color(0xFFECE9E0) : Brand.ink,
-      contentTextStyle: TextStyle(fontFamily: 'Inter', color: dark ? Brand.ink : Brand.paper),
+      backgroundColor: ink,
+      contentTextStyle: TextStyle(fontFamily: 'Inter', color: dark ? card : bg),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusS)),
     ),
     listTileTheme: const ListTileThemeData(contentPadding: EdgeInsets.symmetric(horizontal: 16)),

@@ -20,10 +20,12 @@ import 'package:tuitmate/core/strings/desktop.dart';
 import 'package:tuitmate/core/strings/notify.dart';
 import 'package:tuitmate/core/strings/automation.dart';
 import 'package:tuitmate/core/strings/hub.dart';
+import 'package:tuitmate/core/strings/sync.dart';
+import 'package:tuitmate/core/strings/look.dart';
 
 void main() {
   test('every area has the same keys in en, uz and ru', () {
-    final areas = {'today': todayStrings, 'schedule': scheduleStrings, 'tasks': tasksStrings, 'courses': coursesStrings, 'attendance': attendanceStrings, 'exams': examsStrings, 'grades': gradesStrings, 'profile': profileStrings, 'files': filesStrings, 'news': newsStrings, 'chat': chatStrings, 'welcome': welcomeStrings, 'widget': widgetStrings, 'ai': aiStrings, 'desktop': desktopStrings, 'notify': notifyStrings, 'automation': automationStrings, 'hub': hubStrings};
+    final areas = {'today': todayStrings, 'schedule': scheduleStrings, 'tasks': tasksStrings, 'courses': coursesStrings, 'attendance': attendanceStrings, 'exams': examsStrings, 'grades': gradesStrings, 'profile': profileStrings, 'files': filesStrings, 'news': newsStrings, 'chat': chatStrings, 'welcome': welcomeStrings, 'widget': widgetStrings, 'ai': aiStrings, 'desktop': desktopStrings, 'notify': notifyStrings, 'automation': automationStrings, 'hub': hubStrings, 'sync': syncStrings, 'look': lookStrings};
     areas.forEach((name, t) {
       final en = t['en']!.keys.toSet();
       for (final lang in ['uz', 'ru']) {

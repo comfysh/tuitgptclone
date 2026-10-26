@@ -338,7 +338,7 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
 
 /// Tint for a provider's icon.
 Color _tint(AiPreset p) {
-  const palette = [Brand.primary, Brand.info, Brand.violet, Brand.warning, Brand.success];
+  final palette = [Brand.primary, Brand.info, Brand.violet, Brand.warning, Brand.success];
   final i = AiPreset.all.indexOf(p);
   return palette[(i < 0 ? 0 : i) % palette.length];
 }

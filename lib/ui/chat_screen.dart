@@ -354,11 +354,11 @@ class _ChatScreenState extends State<ChatScreen> {
   /// LMS data (sent to the model as context), or general study help.
   List<_Suggestion> _suggestions(AppState app) {
     if (_pending.isNotEmpty) {
-      return const [
-        _Suggestion(Icons.lightbulb_outline_rounded, Brand.warning, 'chSugFileExplain', 'qpExplain'),
+      return [
+        const _Suggestion(Icons.lightbulb_outline_rounded, Brand.warning, 'chSugFileExplain', 'qpExplain'),
         _Suggestion(Icons.format_list_bulleted_rounded, Brand.primary, 'chSugFileSummary', 'qpSummarize'),
-        _Suggestion(Icons.quiz_outlined, Brand.violet, 'chSugFileQuiz', 'qpQuiz'),
-        _Suggestion(Icons.style_outlined, Brand.success, 'chSugFileCards', 'chSugFileCardsQ'),
+        const _Suggestion(Icons.quiz_outlined, Brand.violet, 'chSugFileQuiz', 'qpQuiz'),
+        const _Suggestion(Icons.style_outlined, Brand.success, 'chSugFileCards', 'chSugFileCardsQ'),
       ];
     }
     final snap = app.snapshot;
@@ -370,18 +370,18 @@ class _ChatScreenState extends State<ChatScreen> {
       });
       return [
         const _Suggestion(Icons.assignment_late_outlined, Brand.warning, 'chSugDue', 'chSugDueQ'),
-        const _Suggestion(Icons.calendar_month_outlined, Brand.primary, 'chSugTomorrow', 'chSugTomorrowQ'),
+        _Suggestion(Icons.calendar_month_outlined, Brand.primary, 'chSugTomorrow', 'chSugTomorrowQ'),
         const _Suggestion(Icons.event_busy_outlined, Brand.danger, 'qpAbsences', 'qpAbsences'),
         if (hasExam) const _Suggestion(Icons.fact_check_outlined, Brand.violet, 'chSugExam', 'chSugExamQ'),
         const _Suggestion(Icons.insights_rounded, Brand.success, 'chSugGrades', 'chSugGradesQ'),
         const _Suggestion(Icons.view_week_outlined, Brand.info, 'chSugWeek', 'qpPlanWeek'),
       ];
     }
-    return const [
-      _Suggestion(Icons.lightbulb_outline_rounded, Brand.warning, 'chSugExplain', 'chSugExplainQ'),
-      _Suggestion(Icons.quiz_outlined, Brand.violet, 'chSugQuiz', 'chSugQuizQ'),
+    return [
+      const _Suggestion(Icons.lightbulb_outline_rounded, Brand.warning, 'chSugExplain', 'chSugExplainQ'),
+      const _Suggestion(Icons.quiz_outlined, Brand.violet, 'chSugQuiz', 'chSugQuizQ'),
       _Suggestion(Icons.description_outlined, Brand.primary, 'chSugReport', 'chSugReportQ'),
-      _Suggestion(Icons.code_rounded, Brand.success, 'chSugCode', 'chSugCodeQ'),
+      const _Suggestion(Icons.code_rounded, Brand.success, 'chSugCode', 'chSugCodeQ'),
     ];
   }
 
@@ -725,7 +725,7 @@ class _Bubble extends StatelessWidget {
           constraints: BoxConstraints(maxWidth: max),
           child: Container(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: Brand.primary,
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(18),

@@ -162,7 +162,8 @@ List<WeekLoad> workload(LmsSnapshot snap, DateTime now, {int weeks = 8}) {
         final end = DateTime(monday.year, monday.month, monday.day + 7 * (w + 1));
         return WeekLoad(
           start,
-          snap.assignments.where((a) => isOpenTask(a) && inWeek(a.deadline, start, end)).length,
+          // Open = not handed in and not graded; inWeek already keeps only what is still ahead of [now].
+          snap.assignments.where((a) => !a.isSubmitted && !a.isGraded && inWeek(a.deadline, start, end)).length,
           snap.finals.where((f) => inWeek(f.startsAt, start, end)).length,
         );
       }(),

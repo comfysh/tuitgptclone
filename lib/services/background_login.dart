@@ -22,51 +22,87 @@ class BackgroundLogin {
 
   static bool _running = false;
 
-  /// At most one try per 20 minutes, and none after 3 failures in a row
-  /// (wrong password, reCAPTCHA refusing): then the user signs in by hand.
-  static const _minGap = Duration(minutes: 20);
-  static const _maxFailures = 3;
+  /// Waits between tries after failures in a row (wrong password, reCAPTCHA
+  /// refusing, no network): 20 min, 1 h, 3 h, then every 6 h. It never gives
+  /// up for good; a manual sign-in or new saved password starts over.
+  static const _backoff = [Duration(minutes: 20), Duration(hours: 1), Duration(hours: 3), Duration(hours: 6)];
 
   static Future<bool> canTry(Settings settings) async {
     if (!(io.Platform.isAndroid || io.Platform.isWindows)) return false;
     if (!settings.backgroundLogin || !settings.autoLogin) return false;
+    return hasSavedLogin();
+  }
+
+  /// Login and password are saved on this device.
+  static Future<bool> hasSavedLogin() async {
     final login = await Secrets.read(Secrets.lmsLogin);
     final pass = await Secrets.read(Secrets.lmsPassword);
     return login != null && login.isNotEmpty && pass != null && pass.isNotEmpty;
   }
 
-  /// Signs in and stores the new session in [client]. True on success; never throws.
-  static Future<bool> run(LmsClient client, Settings settings, AppStorage storage) async {
+  /// When the next automatic try may run, given the last one.
+  static DateTime? nextTry(Map<String, dynamic> state) {
+    final failures = (state['loginFailures'] as num?)?.toInt() ?? 0;
+    final last = DateTime.tryParse('${state['loginTriedAt'] ?? ''}');
+    if (last == null || failures == 0) return null;
+    return last.add(_backoff[(failures - 1).clamp(0, _backoff.length - 1)]);
+  }
+
+  /// Signs in and stores the new session in [client]. True on success; never
+  /// throws. [force] (the "try now" button) skips the wait after failures.
+  static Future<bool> run(LmsClient client, Settings settings, AppStorage storage, {bool force = false}) async {
     if (_running || !await canTry(settings)) return false;
     final state = await storage.readJson(storage.notifyStateFile);
     final failures = (state['loginFailures'] as num?)?.toInt() ?? 0;
     final last = DateTime.tryParse('${state['loginTriedAt'] ?? ''}');
-    if (failures >= _maxFailures) return false;
-    if (last != null && DateTime.now().difference(last) < _minGap) return false;
+    final now = DateTime.now();
+    if (!force) {
+      final next = nextTry(state);
+      if (next != null && now.isBefore(next)) return false;
+      // Two checks at once (app and background): one try is enough.
+      if (last != null && now.difference(last).abs() < const Duration(minutes: 2)) return false;
+    }
     _running = true;
-    state['loginTriedAt'] = DateTime.now().toIso8601String();
+    state['loginTriedAt'] = now.toIso8601String();
     await storage.writeJson(storage.notifyStateFile, state);
-    var ok = false;
+    var result = LoginResult.error;
     try {
-      ok = await _signIn(client);
+      result = await _signIn(client);
     } catch (_) {
-      ok = false;
+      result = LoginResult.error;
     } finally {
       _running = false;
     }
+    final ok = result == LoginResult.ok;
     final after = await storage.readJson(storage.notifyStateFile);
     after['loginFailures'] = ok ? 0 : failures + 1;
-    if (ok) after['sessionNotified'] = false;
+    after['loginResult'] = result.name;
+    if (ok) {
+      after['loginOkAt'] = DateTime.now().toIso8601String();
+      after['sessionNotified'] = false;
+    }
     await storage.writeJson(storage.notifyStateFile, after);
     return ok;
   }
 
-  /// A manual sign-in resets the failure counter.
+  /// A manual sign-in or a new saved password starts over.
   static Future<void> reset(AppStorage storage) async {
     final state = await storage.readJson(storage.notifyStateFile);
     state.remove('loginFailures');
     state.remove('loginTriedAt');
     await storage.writeJson(storage.notifyStateFile, state);
+  }
+
+  /// How automatic sign-in went last: for the status line in Profile.
+  static Future<LoginStatus> status(AppStorage storage) async {
+    final state = await storage.readJson(storage.notifyStateFile);
+    return LoginStatus(
+      okAt: DateTime.tryParse('${state['loginOkAt'] ?? ''}'),
+      triedAt: DateTime.tryParse('${state['loginTriedAt'] ?? ''}'),
+      result: LoginResult.values.where((r) => r.name == state['loginResult']).firstOrNull,
+      failures: (state['loginFailures'] as num?)?.toInt() ?? 0,
+      nextTry: nextTry(state),
+    );
   }
 
   static bool _isLoggedInPage(WebUri? url) {
@@ -75,11 +111,11 @@ class BackgroundLogin {
     return !(p.startsWith('/auth') || p == '/login' || p.startsWith('/login/') || p == '/schedule');
   }
 
-  static Future<bool> _signIn(LmsClient client) async {
+  static Future<LoginResult> _signIn(LmsClient client) async {
     final login = await Secrets.read(Secrets.lmsLogin);
     final pass = await Secrets.read(Secrets.lmsPassword);
-    if (login == null || pass == null) return false;
-    final done = Completer<bool>();
+    if (login == null || pass == null) return LoginResult.error;
+    final done = Completer<LoginResult>();
     var submitted = false;
 
     Future<void> capture(InAppWebViewController c) async {
@@ -94,7 +130,7 @@ class BackgroundLogin {
       }
       if (!cookies.any((k) => k.name.toLowerCase().contains('session'))) return;
       await client.importCookies(cookies);
-      if (!done.isCompleted) done.complete(true);
+      if (!done.isCompleted) done.complete(LoginResult.ok);
     }
 
     Future<void> onPage(InAppWebViewController c, WebUri? url) async {
@@ -107,7 +143,7 @@ class BackgroundLogin {
       final error = await c.evaluateJavascript(source: "!!document.querySelector('[role=alert], .alert-danger')");
       if (submitted) {
         // Back on the login page after pressing the button: refused.
-        if (error == true && !done.isCompleted) done.complete(false);
+        if (error == true && !done.isCompleted) done.complete(LoginResult.refused);
         return;
       }
       submitted = true;
@@ -132,11 +168,25 @@ class BackgroundLogin {
     );
     try {
       await view.run();
-      return await done.future.timeout(const Duration(seconds: 75), onTimeout: () => false);
+      return await done.future.timeout(const Duration(seconds: 75), onTimeout: () => LoginResult.timeout);
     } finally {
       try {
         await view.dispose();
       } catch (_) {}
     }
   }
+}
+
+/// How an automatic sign-in ended: signed in, LMS showed an error on the
+/// login page (wrong password or reCAPTCHA), no answer in time, or another
+/// problem (no network, no saved password).
+enum LoginResult { ok, refused, timeout, error }
+
+class LoginStatus {
+  const LoginStatus({this.okAt, this.triedAt, this.result, this.failures = 0, this.nextTry});
+  final DateTime? okAt;
+  final DateTime? triedAt;
+  final LoginResult? result;
+  final int failures;
+  final DateTime? nextTry;
 }

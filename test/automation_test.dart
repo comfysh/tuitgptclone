@@ -116,7 +116,8 @@ process.stdout.write(JSON.stringify(result));
   test('changes become events with the full task, exam and absence', () async {
     SharedPreferences.setMockInitialValues({});
     final settings = await Settings.load();
-    final deadline = DateTime(2026, 10, 25, 23, 59);
+    final soon = DateTime.now().add(const Duration(days: 2));
+    final deadline = DateTime(soon.year, soon.month, soon.day, 23, 59); // still open whenever the test runs
     final task = Assignment(courseId: 1, courseName: 'Database', name: 'Lab 3', maxGrade: 5, deadline: deadline, uploadId: 9, activityId: 77);
     const absence = Absence(subject: 'Database', subjectId: 3, themeNumber: 6, lessonType: 'Amaliy');
     final snap = LmsSnapshot(

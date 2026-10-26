@@ -26,14 +26,20 @@ void callbackDispatcher() {
       // This isolate is separate from the UI one, so date formats load again here.
       await initializeDateFormatting();
       await runLmsCheck();
-    } catch (_) {}
+    } catch (_) {
+      // Offline or LMS down: Android runs the check again soon (backoff
+      // below) instead of waiting for the next period.
+      return false;
+    }
     return true;
   });
 }
 
-/// One background check: download a light snapshot, compare, notify, and send
-/// automation events. When LMS has ended the session it signs in again with
-/// the saved password first (see BackgroundLogin).
+/// One background check: download a snapshot (everything, when teacher files
+/// and the rest are older than [fullSyncEvery]; otherwise the parts that
+/// change during the day), compare, notify, and send automation events. When
+/// LMS has ended the session it signs in again with the saved password first
+/// (see BackgroundLogin).
 Future<void> runLmsCheck() async {
   final settings = await Settings.load(reload: true);
   if (!settings.notifications && !Automation.active(settings)) return;
@@ -43,7 +49,8 @@ Future<void> runLmsCheck() async {
   // Signed out: sign-out deletes the snapshot and the saved password.
   if (prev == null && !await client.hasSession()) return;
 
-  Future<LmsSnapshot> fetch() => fetchSnapshot(client, previous: prev, semesterId: settings.semesterId, full: false);
+  final full = prev == null || needsFullSync(prev, DateTime.now());
+  Future<LmsSnapshot> fetch() => fetchSnapshot(client, previous: prev, semesterId: settings.semesterId, full: full);
   LmsSnapshot now;
   try {
     // The cookie jar drops the session cookie once it expires (LMS keeps it ~2 h).
@@ -90,6 +97,8 @@ class Background {
       frequency: Duration(minutes: max(15, settings.checkMinutes)),
       constraints: Constraints(networkType: NetworkType.connected),
       existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
+      backoffPolicy: BackoffPolicy.exponential,
+      backoffPolicyDelay: const Duration(minutes: 1),
     );
   }
 }

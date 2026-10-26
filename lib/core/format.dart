@@ -6,9 +6,10 @@ import '../ui/design.dart';
 import 'strings.dart';
 
 /// Main brand blue (kept under the old name for existing call sites).
-const lmsBlue = Brand.primary;
+Color get lmsBlue => Brand.primary;
 
-ThemeData buildTheme(Brightness b) => buildAppTheme(b);
+ThemeData buildTheme(Brightness b, {AppStyle style = AppStyle.paper, bool pureBlack = false}) =>
+    buildAppTheme(b, style: style, pureBlack: pureBlack);
 
 String _locale(String lang) => lang == 'uz' ? 'uz' : (lang == 'ru' ? 'ru' : 'en');
 

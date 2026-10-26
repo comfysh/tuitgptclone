@@ -8,6 +8,7 @@ import 'core/format.dart';
 import 'services/desktop_tray.dart';
 import 'services/notifier.dart';
 import 'services/web_env.dart';
+import 'ui/design.dart' show Brand;
 import 'ui/home_shell.dart';
 import 'ui/nav.dart';
 import 'ui/welcome_screen.dart';
@@ -42,9 +43,19 @@ class TuitMateApp extends StatelessWidget {
     return MaterialApp(
       title: 'TuitMate',
       debugShowCheckedModeBanner: false,
-      theme: buildTheme(Brightness.light),
-      darkTheme: buildTheme(Brightness.dark),
+      theme: buildTheme(Brightness.light, style: app.style),
+      darkTheme: buildTheme(Brightness.dark, style: app.style, pureBlack: app.settings.pureBlack),
       themeMode: app.themeMode,
+      // The colours screens take from Brand follow the theme on screen.
+      builder: (context, child) {
+        final b = switch (app.themeMode) {
+          ThemeMode.light => Brightness.light,
+          ThemeMode.dark => Brightness.dark,
+          ThemeMode.system => MediaQuery.platformBrightnessOf(context),
+        };
+        Brand.apply(app.style, b, pureBlack: app.settings.pureBlack);
+        return child ?? const SizedBox.shrink();
+      },
       locale: Locale(lang == 'uz' ? 'uz' : lang),
       supportedLocales: const [Locale('en'), Locale('ru'), Locale('uz')],
       localizationsDelegates: const [

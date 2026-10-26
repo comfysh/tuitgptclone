@@ -22,7 +22,7 @@ class WelcomeScreen extends StatelessWidget {
 }
 
 /// The four highlights shown on the welcome screen.
-const _features = [
+final _features = [
   (Icons.calendar_month_rounded, Brand.primary, 'wlFeatTimetable', 'wlFeatTimetableSub'),
   (Icons.assignment_turned_in_rounded, Brand.warning, 'wlFeatTasks', 'wlFeatTasksSub'),
   (Icons.workspace_premium_rounded, Brand.success, 'wlFeatGrades', 'wlFeatGradesSub'),

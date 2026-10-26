@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -17,13 +18,21 @@ import 'services/home_widget_service.dart';
 import 'services/inbox.dart';
 import 'services/notifier.dart';
 import 'services/web_env.dart';
+import 'ui/themes.dart';
 
 /// Global app state: settings, LMS session and the latest data snapshot.
 class AppState extends ChangeNotifier with WidgetsBindingObserver {
   AppState(this.settings, this.storage, this.client, this.snapshot, this.loggedIn) {
     WidgetsBinding.instance.addObserver(this);
-    _startDesktopTimer();
+    _startTimer();
   }
+
+  /// How often the app checks LMS while it is open (on PC also while it sits
+  /// in the tray). Closed, Android's background checks take over.
+  static const openCheckMinutes = 10;
+
+  /// Retries after a sync that could not load everything.
+  static const _retryDelays = [Duration(seconds: 30), Duration(seconds: 90), Duration(minutes: 5)];
 
   final Settings settings;
   final AppStorage storage;
@@ -39,6 +48,13 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   bool sessionExpired = false;
   String? lastError;
   Timer? _timer;
+  Timer? _retryTimer;
+  int _retries = 0;
+  AppLifecycleState _life = AppLifecycleState.resumed;
+
+  /// Parts of the last sync that still failed after the automatic retries
+  /// (keys of [LmsSnapshot.errors]); the saved copy is shown for them.
+  List<String> get failedParts => _retries >= _retryDelays.length ? snapshot.errors.keys.toList() : const [];
 
   /// Completes when the running refresh finishes.
   Completer<void>? _sync;
@@ -103,6 +119,18 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  AppStyle get style => styleById(settings.themeStyle);
+
+  void setStyle(AppStyle v) {
+    settings.themeStyle = v.name;
+    notifyListeners();
+  }
+
+  void setPureBlack(bool v) {
+    settings.pureBlack = v;
+    notifyListeners();
+  }
+
   /// Call after changing any setting that affects what is shown.
   void touch() {
     notifyListeners();
@@ -119,19 +147,25 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     try {
       await Background.configure(settings);
     } catch (_) {}
-    _startDesktopTimer();
+    _startTimer();
   }
 
-  void _startDesktopTimer() {
+  void _startTimer() {
     _timer?.cancel();
-    if (Platform.isAndroid || (!settings.notifications && !Automation.active(settings))) return;
-    _timer = Timer.periodic(Duration(minutes: settings.checkMinutes.clamp(5, 240)), (_) {
-      if (loggedIn && !sessionExpired) refresh(full: false, silent: true);
+    final every = Duration(minutes: min(settings.checkMinutes, openCheckMinutes).clamp(5, 240));
+    _timer = Timer.periodic(every, (_) {
+      if (!loggedIn) return;
+      // On Android, once the app is in the background its own checks run.
+      if (Platform.isAndroid && _life != AppLifecycleState.resumed) return;
+      // An ended session is retried only when the app may sign in by itself.
+      if (sessionExpired && !(settings.autoLogin && settings.backgroundLogin)) return;
+      refresh(full: false, silent: true);
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _life = state;
     if (state == AppLifecycleState.resumed && loggedIn) _onResumed();
   }
 
@@ -139,7 +173,16 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final adopted = await _adoptDiskSnapshot();
     if (await _reloadInbox() || adopted) notifyListeners();
     final age = DateTime.now().difference(snapshot.updatedAt ?? DateTime(2000));
-    if (age > const Duration(minutes: 10)) await refresh(full: false, silent: true);
+    if (age > const Duration(minutes: 2)) await refresh(full: false, silent: true);
+  }
+
+  /// After a sync that missed parts (or failed), tries again a few times.
+  void _scheduleRetry({required bool full}) {
+    _retryTimer?.cancel();
+    if (!loggedIn || sessionExpired || _retries >= _retryDelays.length) return;
+    _retryTimer = Timer(_retryDelays[_retries++], () {
+      if (loggedIn && !sessionExpired) refresh(full: full, silent: true);
+    });
   }
 
   /// The Android background worker runs in another isolate and saves its own
@@ -179,13 +222,19 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
     syncing = true;
     final done = _sync = Completer<void>();
-    if (!silent) lastError = null;
+    if (!silent) {
+      lastError = null;
+      _retries = 0; // asked by hand: retry failed parts again
+    }
     notifyListeners();
     final epoch = client.epoch;
+    var retry = false, retryFull = false;
     try {
       await _adoptDiskSnapshot();
       final old = snapshot;
-      final fresh = await fetchSnapshot(client, previous: old, semesterId: settings.semesterId, full: full);
+      // A light check loads everything when teacher files etc. are an hour old.
+      final everything = full || needsFullSync(old, DateTime.now());
+      final fresh = await fetchSnapshot(client, previous: old, semesterId: settings.semesterId, full: everything);
       if (!loggedIn || client.epoch != epoch) return; // signed out meanwhile: drop the result
       // The Android worker may have saved (and notified) while we fetched;
       // diff against the newest copy so nothing is announced twice.
@@ -198,6 +247,13 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       snapshot = fresh;
       sessionExpired = false;
       lastError = null;
+      if (fresh.errors.isEmpty) {
+        _retries = 0;
+        _retryTimer?.cancel();
+      } else {
+        retry = true;
+        retryFull = fresh.errors.keys.any((k) => k == 'info' || k == 'studyPlan' || k.startsWith('lessons:'));
+      }
       try {
         await storage.saveSnapshot(fresh);
       } catch (_) {}
@@ -226,7 +282,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         }
       }
     } catch (e) {
-      if (loggedIn && client.epoch == epoch) lastError = e.toString();
+      if (loggedIn && client.epoch == epoch) {
+        lastError = e.toString();
+        retry = true;
+        retryFull = full;
+      }
     } finally {
       syncing = false;
       done.complete();
@@ -237,7 +297,37 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       unawaited(refresh());
     } else {
       _reloggedIn = false;
+      if (retry) _scheduleRetry(full: retryFull);
     }
+  }
+
+  /// Saves the LMS login and password for automatic sign-in (an empty
+  /// [password] keeps the saved one).
+  Future<void> saveLogin(String login, String? password) async {
+    await Secrets.write(Secrets.lmsLogin, login.trim());
+    if (password != null && password.isNotEmpty) await Secrets.write(Secrets.lmsPassword, password);
+    settings.rememberPassword = true;
+    await BackgroundLogin.reset(storage);
+    notifyListeners();
+  }
+
+  /// Deletes the saved login and password; automatic sign-in stops.
+  Future<void> forgetLogin() async {
+    await Secrets.deleteLms();
+    settings.rememberPassword = false;
+    notifyListeners();
+  }
+
+  /// Signs in right now with the saved password ("Try now" in Profile).
+  Future<bool> signInNow() async {
+    if (!loggedIn) return false;
+    final ok = await BackgroundLogin.run(client, settings, storage, force: true);
+    if (ok && loggedIn) {
+      sessionExpired = false;
+      unawaited(refresh());
+    }
+    notifyListeners();
+    return ok;
   }
 
   /// [id] null means "follow the LMS's current semester".
@@ -297,6 +387,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     _refreshAgain = false;
     snapshot = LmsSnapshot();
     inbox = const [];
+    _retryTimer?.cancel();
+    _retries = 0;
     sessionExpired = false;
     lastError = null;
     try {
@@ -334,6 +426,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     _timer?.cancel();
+    _retryTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

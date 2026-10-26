@@ -426,7 +426,7 @@ class _ThisSemesterCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const TintIcon(Icons.school_rounded, color: Brand.primary, size: 38),
+          TintIcon(Icons.school_rounded, color: Brand.primary, size: 38),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

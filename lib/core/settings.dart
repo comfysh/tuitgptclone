@@ -31,6 +31,23 @@ class Settings {
   ThemeMode get themeMode => ThemeMode.values[_p.getInt('themeMode') ?? 0];
   set themeMode(ThemeMode v) => _p.setInt('themeMode', v.index);
 
+  /// Theme name (lib/ui/themes.dart AppStyle), e.g. "paper", "ocean".
+  String get themeStyle => _p.getString('themeStyle') ?? 'paper';
+  set themeStyle(String v) => _p.setString('themeStyle', v);
+
+  /// True-black backgrounds in dark mode (OLED screens).
+  bool get pureBlack => _p.getBool('pureBlack') ?? false;
+  set pureBlack(bool v) => _p.setBool('pureBlack', v);
+
+  /// Today's sections in the order shown; hidden ones are kept with a "-"
+  /// in front. Null: the default layout (lib/ui/today_layout.dart).
+  List<String>? get todayLayout => _p.getStringList('todayLayout');
+  set todayLayout(List<String>? v) => v == null ? _p.remove('todayLayout') : _p.setStringList('todayLayout', v);
+
+  /// The place the app opens on: "today", "plan", "inbox" or "study".
+  String get startHub => _p.getString('startHub') ?? 'today';
+  set startHub(String v) => _p.setString('startHub', v);
+
   int? get semesterId => _p.getInt('semesterId');
   set semesterId(int? v) => v == null ? _p.remove('semesterId') : _p.setInt('semesterId', v);
 
@@ -70,7 +87,7 @@ class Settings {
   bool get notifications => _p.getBool('notifications') ?? true;
   set notifications(bool v) => _p.setBool('notifications', v);
 
-  int get checkMinutes => _p.getInt('checkMinutes') ?? 30;
+  int get checkMinutes => _p.getInt('checkMinutes') ?? 15;
   set checkMinutes(int v) => _p.setInt('checkMinutes', v);
 
   bool get remindDeadlines => _p.getBool('remindDeadlines') ?? true;

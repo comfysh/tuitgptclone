@@ -746,7 +746,7 @@ class _WeekSummary extends StatelessWidget {
     final total = slots.length;
 
     final head = Row(mainAxisSize: MainAxisSize.min, children: [
-      const TintIcon(Icons.calendar_view_week_rounded, color: Brand.primary),
+      TintIcon(Icons.calendar_view_week_rounded, color: Brand.primary),
       const SizedBox(width: 12),
       Flexible(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [

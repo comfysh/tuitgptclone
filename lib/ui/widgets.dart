@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../core/format.dart';
 import '../core/strings.dart';
+import '../lms/snapshot.dart';
 import 'design.dart';
 import 'lms_web_page.dart';
 import 'nav.dart';
@@ -241,6 +242,15 @@ class SyncBanner extends StatelessWidget {
         action: TextButton(onPressed: () => app.refresh(), child: Text(s['retry'])),
       );
     }
+    final failed = app.failedParts;
+    if (failed.isNotEmpty && !app.snapshot.isEmpty) {
+      return _Banner(
+        color: Brand.warning,
+        icon: Icons.sync_problem_rounded,
+        text: s.f('syPartsFailed', {'parts': syncPartLabels(failed, app.snapshot, s).join(', ')}),
+        action: TextButton(onPressed: () => app.refresh(), child: Text(s['retry'])),
+      );
+    }
     if (app.snapshot.isEmpty && app.syncing) {
       return Column(children: [
         Padding(
@@ -264,6 +274,30 @@ class SyncBanner extends StatelessWidget {
     }
     return const SizedBox.shrink();
   }
+}
+
+/// Readable names for the parts of a sync ([LmsSnapshot.errors] keys),
+/// without repeats: "Courses: Database", "Teacher files", "Exams"…
+List<String> syncPartLabels(Iterable<String> keys, LmsSnapshot snap, S s) {
+  final out = <String>{};
+  for (final k in keys) {
+    final id = int.tryParse(k.substring(k.indexOf(':') + 1));
+    final course = id == null ? null : snap.courseById(id)?.subject;
+    out.add(switch (k.split(':').first) {
+      'semesters' => s['semester'],
+      'info' => s['pfStudentInfo'],
+      'courses' => s['coursesShort'],
+      'course' => course ?? s['coursesShort'],
+      'lessons' => '${s['navFiles']}${course == null ? '' : ': $course'}',
+      'schedule' => s['schedule'],
+      'attendance' => s['attendance'],
+      'exams' => s['exams'],
+      'studyPlan' => s['studyPlan'],
+      'news' => s['news'],
+      _ => k,
+    });
+  }
+  return out.toList();
 }
 
 class _Banner extends StatelessWidget {

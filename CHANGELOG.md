@@ -4,6 +4,33 @@ All notable changes to TuitMate. The release notes on GitHub are taken from this
 add a section `## [x.y.z] - date` and raise `version:` in `pubspec.yaml` (and `lib/core/version.dart`)
 to publish a new release.
 
+## [1.3.0] - 2026-10-26
+
+Signs in by itself, checks more often and more completely, six themes, and a Today screen you arrange yourself.
+
+### Highlights
+- **Saved sign-in** (*Profile › Sign-in*): see which LMS login is saved, add or change the login and
+  password (useful after signing in with OneID), and see when TuitMate last signed in by itself.
+  **Try now** tests it.
+- **Automatic sign-in never gives up**: after a failure it waits 20 min, 1 h, 3 h, then tries every 6 h,
+  instead of stopping after three tries. The login page opens by itself at most once per ended session.
+- **Always up to date**: while the app is open (on PC also in the tray) it checks LMS every 10 minutes
+  and whenever you return to it after 2 minutes. Background checks on Android now run every 15 minutes
+  by default and also load teacher files, profile and study plan at least every hour, so new teacher
+  files are noticed without opening the app. Parts that fail to load are retried (after 30 s, 90 s and
+  5 min); if they still fail, a banner says which ones and the saved copy is shown. A background check
+  that fails because of the network runs again soon instead of waiting for the next slot.
+- **Sync** (*Profile › Sync*): when LMS was last checked, when teacher files were last loaded, how often
+  checks run, and **Check everything now**.
+- **Six themes**, each light and dark: **Paper**, **Ocean**, **Lagoon**, **Plum**, **Terracotta** and
+  **Graphite**, with their own colours and title font, and a **pure black** option for OLED screens.
+- **Customize Today** (sliders button at the top of Today): drag sections into your order, switch them on or off, add the new
+  *Workload by week*, *Attendance* and *Latest news* sections, and choose the place the app opens on
+  (Today, Plan, Inbox or Study).
+
+### Fixed
+- Workload by week counted deadlines against the device clock instead of the day it was showing.
+
 ## [1.2.0] - 2026-10-23
 
 A new way around the app: four places built around what you want to do, not the LMS menu, and one

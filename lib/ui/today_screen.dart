@@ -16,11 +16,15 @@ import 'inbox_screen.dart' show InboxRow;
 import 'courses_screen.dart';
 import 'deadlines_screen.dart';
 import 'nav.dart';
+import 'news_screen.dart' show NewsDetailPage;
+import 'today_layout.dart';
 import 'widgets.dart';
+import 'workload.dart';
 
 /// Today as one agenda in time order: classes, the gaps between them, what is
-/// due today and exams, with a "now" line. Then what is due this week, a strip
-/// of numbers and tomorrow.
+/// due today and exams, with a "now" line. Then what's new, what is due this
+/// week, a strip of numbers, tomorrow and more; the student picks which
+/// sections show and in what order (lib/ui/today_layout.dart).
 class TodayScreen extends StatefulWidget {
   const TodayScreen({super.key});
 
@@ -97,55 +101,80 @@ class _TodayScreenState extends State<TodayScreen> {
               constraints: const BoxConstraints(maxWidth: 1080),
               child: LayoutBuilder(builder: (context, c) {
                 final wide = c.maxWidth >= 900;
-                final left = <Widget>[
-                  SectionHeader(s['tdAgenda'], action: s['schedule'], onAction: () => nav.go(Dest.schedule)),
-                  agenda,
-                  SectionHeader(s['tdTomorrow'], padding: const EdgeInsets.fromLTRB(2, 18, 2, 8)),
-                  _Tomorrow(slots: tomorrow),
-                ];
-                final right = <Widget>[
-                  if (fresh.isNotEmpty) ...[
-                    // Unread updates from the Inbox, newest first.
-                    SectionHeader(s['tdWhatsNew'], action: s.f('ibNew', {'n': fresh.length}), onAction: () => nav.go(Dest.inbox)),
-                    AppCard(
-                      padding: EdgeInsets.zero,
-                      child: Column(children: [
-                        for (final (i, item) in fresh.take(3).indexed) ...[
-                          if (i > 0) Divider(height: 1, indent: 64, color: Theme.of(context).colorScheme.outlineVariant),
-                          InboxRow(item: item, showDay: true),
-                        ],
-                      ]),
-                    ),
+                final cs = Theme.of(context).colorScheme;
+                // Every section; "Customize Today" decides which show and in what order.
+                final parts = <TodaySection, List<Widget>>{
+                  TodaySection.agenda: [
+                    SectionHeader(s['tdAgenda'], action: s['schedule'], onAction: () => nav.go(Dest.schedule)),
+                    agenda,
                   ],
-                  SectionHeader(s['tdDueNext'], action: s['all'], onAction: () => nav.go(Dest.deadlines)),
-                  week,
-                  const SizedBox(height: 12),
-                  numbers,
-                  if (nextExam != null) ...[
-                    const SizedBox(height: 12),
-                    _Line(
-                      icon: Icons.fact_check_outlined,
-                      color: Brand.danger,
-                      title: '${s['nextExam']}: ${nextExam.subject}',
-                      subtitle: [
-                        '${fmtWeekday(nextExam.startsAt!, s.lang)}, ${fmtDate(nextExam.startsAt!, s.lang)}',
-                        if (nextExam.from != null) nextExam.from!,
-                        if (nextExam.room != null) nextExam.room!,
-                      ].join(' · '),
-                      onTap: () => nav.go(Dest.exams),
-                    ),
+                  // Unread updates from the Inbox, newest first.
+                  TodaySection.whatsNew: [
+                    if (fresh.isNotEmpty) ...[
+                      SectionHeader(s['tdWhatsNew'], action: s.f('ibNew', {'n': fresh.length}), onAction: () => nav.go(Dest.inbox)),
+                      AppCard(
+                        padding: EdgeInsets.zero,
+                        child: Column(children: [
+                          for (final (i, item) in fresh.take(3).indexed) ...[
+                            if (i > 0) Divider(height: 1, indent: 64, color: cs.outlineVariant),
+                            InboxRow(item: item, showDay: true),
+                          ],
+                        ]),
+                      ),
+                    ],
                   ],
-                  if (debt != null) ...[
-                    const SizedBox(height: 12),
-                    _Line(
-                      icon: Icons.account_balance_wallet_outlined,
-                      color: Brand.danger,
-                      title: s['tdDebt'],
-                      subtitle: s.f('tdDebtSub', {'amount': '${fmtMoney(debt.debt!)} ${debt.currency ?? ''}'.trim(), 'year': debt.year}),
-                      onTap: () => nav.go(Dest.profile),
-                    ),
+                  TodaySection.due: [
+                    SectionHeader(s['tdDueNext'], action: s['all'], onAction: () => nav.go(Dest.deadlines)),
+                    week,
                   ],
-                ];
+                  TodaySection.numbers: [const SizedBox(height: 12), numbers],
+                  TodaySection.nextExam: [
+                    if (nextExam != null) ...[
+                      const SizedBox(height: 12),
+                      _Line(
+                        icon: Icons.fact_check_outlined,
+                        color: Brand.danger,
+                        title: '${s['nextExam']}: ${nextExam.subject}',
+                        subtitle: [
+                          '${fmtWeekday(nextExam.startsAt!, s.lang)}, ${fmtDate(nextExam.startsAt!, s.lang)}',
+                          if (nextExam.from != null) nextExam.from!,
+                          if (nextExam.room != null) nextExam.room!,
+                        ].join(' · '),
+                        onTap: () => nav.go(Dest.exams),
+                      ),
+                    ],
+                  ],
+                  TodaySection.debt: [
+                    if (debt != null) ...[
+                      const SizedBox(height: 12),
+                      _Line(
+                        icon: Icons.account_balance_wallet_outlined,
+                        color: Brand.danger,
+                        title: s['tdDebt'],
+                        subtitle: s.f('tdDebtSub', {'amount': '${fmtMoney(debt.debt!)} ${debt.currency ?? ''}'.trim(), 'year': debt.year}),
+                        onTap: () => nav.go(Dest.profile),
+                      ),
+                    ],
+                  ],
+                  TodaySection.tomorrow: [
+                    SectionHeader(s['tdTomorrow'], padding: const EdgeInsets.fromLTRB(2, 18, 2, 8)),
+                    _Tomorrow(slots: tomorrow),
+                  ],
+                  TodaySection.workload: [const WorkloadCard(onToday: true)],
+                  TodaySection.attendance: [
+                    SectionHeader(s['tlAttendance'], action: s['all'], onAction: () => nav.go(Dest.attendance)),
+                    const _AttendanceCard(),
+                  ],
+                  TodaySection.news: [
+                    if (snap.news.isNotEmpty) ...[
+                      SectionHeader(s['tlNews'], action: s['all'], onAction: () => nav.go(Dest.news)),
+                      _NewsCard(items: snap.news.take(2).toList()),
+                    ],
+                  ],
+                };
+                final shown = [for (final (t, on) in todayLayout(app.settings)) if (on) t];
+                final left = [for (final t in shown) if (!wide || isDayColumn(t)) ...parts[t]!];
+                final right = [for (final t in shown) if (wide && !isDayColumn(t)) ...parts[t]!];
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -154,16 +183,15 @@ class _TodayScreenState extends State<TodayScreen> {
                     const SizedBox(height: 6),
                     const SyncBanner(),
                     if (!snap.isEmpty) ...[
-                      if (wide)
+                      if (wide && left.isNotEmpty && right.isNotEmpty)
                         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Expanded(flex: 11, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: left)),
                           const SizedBox(width: 24),
                           Expanded(flex: 9, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: right)),
                         ])
                       else ...[
-                        ...left.take(2),
+                        ...left,
                         ...right,
-                        ...left.skip(2),
                       ],
                       if (snap.updatedAt != null)
                         Padding(
@@ -231,6 +259,7 @@ class _Masthead extends StatelessWidget {
         ]),
       ),
       const SizedBox(width: 8),
+      HeaderButton(icon: Icons.tune_rounded, tooltip: s['tlCustomize'], onPressed: () => showTodayCustomizer(context)),
       HeaderButton(icon: Icons.refresh_rounded, tooltip: s['refresh'], busy: app.syncing, onPressed: () => app.refresh()),
       GestureDetector(
         onTap: () => context.read<NavController>().go(Dest.profile),
@@ -531,6 +560,75 @@ class _DueWeek extends StatelessWidget {
 // ---------------------------------------------------------------- numbers
 
 /// Open tasks · NB hours · GPA · rating in one bordered strip.
+/// Attendance at a glance: hours used against the limit and what is left.
+class _AttendanceCard extends StatelessWidget {
+  const _AttendanceCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final app = context.watch<AppState>();
+    final s = S.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final att = AttendanceSummary.from(app.snapshot, app.settings);
+    final color = att.ratio >= 0.75 ? Brand.danger : (att.ratio >= 0.5 ? Brand.warning : Brand.success);
+    return AppCard(
+      onTap: () => context.read<NavController>().go(Dest.attendance),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text('${att.hoursUsed}',
+              style: TextStyle(fontFamily: serif, fontSize: 26, fontWeight: FontWeight.w700, color: color, height: 1, fontFeatures: tabular)),
+          Text(' / ${att.limitHours} ${s['tdNbHours']}',
+              style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+        ]),
+        const SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(value: att.ratio, minHeight: 6, color: color, backgroundColor: cs.surfaceContainerHighest),
+        ),
+        const SizedBox(height: 8),
+        Text(att.classesLeft > 0 ? s.f('tlCanMiss', {'n': att.classesLeft}) : s['tlNoneLeft'],
+            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+      ]),
+    );
+  }
+}
+
+/// The latest LMS news, title and date.
+class _NewsCard extends StatelessWidget {
+  const _NewsCard({required this.items});
+  final List<NewsItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final cs = Theme.of(context).colorScheme;
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: Column(children: [
+        for (final (i, n) in items.indexed) ...[
+          if (i > 0) Divider(height: 1, indent: 16, color: cs.outlineVariant),
+          InkWell(
+            onTap: () => NewsDetailPage.open(context, n),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(n.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    if (n.date != null)
+                      Text(fmtDate(n.date!, s.lang), style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant)),
+                  ]),
+                ),
+                Icon(Icons.chevron_right_rounded, color: cs.outline),
+              ]),
+            ),
+          ),
+        ],
+      ]),
+    );
+  }
+}
+
 class _Numbers extends StatelessWidget {
   const _Numbers({required this.open});
   final int open;

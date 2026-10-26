@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,13 +9,17 @@ import '../app_state.dart';
 import '../core/format.dart';
 import '../core/storage.dart';
 import '../core/strings.dart';
+import '../core/timetable.dart' show dateOnly;
 import '../core/version.dart';
 import '../lms/changes.dart';
 import '../lms/models.dart';
+import '../services/automation.dart';
+import '../services/background_login.dart';
 import '../services/notifier.dart';
 import 'ai_settings_page.dart';
 import 'automation_page.dart';
 import 'lms_web_page.dart';
+import 'theme_picker.dart';
 import 'widgets.dart';
 
 export 'ai_settings_page.dart' show AiSettingsPage;
@@ -428,43 +433,6 @@ class _SettingsSections extends StatelessWidget {
               app.changeSemester(target);
             },
           ),
-        _SwitchRow(
-          icon: Icons.password_rounded,
-          color: Brand.violet,
-          title: s['rememberPassword'],
-          value: st.rememberPassword,
-          onChanged: (v) {
-            st.rememberPassword = v;
-            if (!v) Secrets.deleteLms();
-            app.touch();
-          },
-        ),
-        _SwitchRow(
-          icon: Icons.login_rounded,
-          color: Brand.info,
-          title: s['autoLogin'],
-          value: st.autoLogin,
-          onChanged: (v) {
-            st.autoLogin = v;
-            app.touch();
-          },
-        ),
-        FutureBuilder<String?>(
-          future: Secrets.read(Secrets.lmsPassword),
-          builder: (context, pass) => _SwitchRow(
-            icon: Icons.sync_lock_rounded,
-            color: Brand.success,
-            title: s['nfStaySignedIn'],
-            subtitle: (pass.data ?? '').isEmpty && pass.connectionState == ConnectionState.done
-                ? s['nfNeedsPassword']
-                : s['nfStaySignedInSub'],
-            value: st.backgroundLogin,
-            onChanged: (v) {
-              st.backgroundLogin = v;
-              app.touch();
-            },
-          ),
-        ),
         _Row(
           icon: Icons.logout_rounded,
           color: cs.error,
@@ -492,6 +460,12 @@ class _SettingsSections extends StatelessWidget {
         ),
       ]),
 
+      // ---- sign-in and sync
+      SectionHeader(s['slTitle']),
+      const _SignInGroup(),
+      SectionHeader(s['syTitle']),
+      const _SyncGroup(),
+
       // ---- appearance
       SectionHeader(s['pfAppearance']),
       _Group([
@@ -504,9 +478,17 @@ class _SettingsSections extends StatelessWidget {
           onChanged: (v) => app.setLanguage(v),
         ),
         _Row(
+          icon: Icons.palette_outlined,
+          color: Brand.primary,
+          title: s['thStyle'],
+          subtitle: s[styleSpecs[app.style]!.nameKey],
+          onTap: () => showThemePicker(context),
+          trailing: const Icon(Icons.chevron_right_rounded),
+        ),
+        _Row(
           icon: Icons.dark_mode_rounded,
           color: Brand.violet,
-          title: s['theme'],
+          title: s['thMode'],
           trailing: _ThemeSwitch(value: st.themeMode, onChanged: (v) => app.setThemeMode(v)),
         ),
       ]),
@@ -737,7 +719,7 @@ class _SettingsSections extends StatelessWidget {
                 height: 44,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(color: cs.onSurface, borderRadius: BorderRadius.circular(radiusS)),
-                child: Text('T', style: TextStyle(fontFamily: serif, fontSize: 26, fontWeight: FontWeight.w700, color: cs.surface, height: 1)),
+                child: Text('T', style: TextStyle(fontFamily: brandFont, fontSize: 26, fontWeight: FontWeight.w700, color: cs.surface, height: 1)),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -771,6 +753,235 @@ class _SettingsSections extends StatelessWidget {
 }
 
 /// Settings rows in one card, separated by hairlines.
+/// Saved LMS login and password, automatic sign-in, and how it went last.
+class _SignInGroup extends StatefulWidget {
+  const _SignInGroup();
+
+  @override
+  State<_SignInGroup> createState() => _SignInGroupState();
+}
+
+class _SignInGroupState extends State<_SignInGroup> {
+  String? _login;
+  bool _hasPassword = false;
+  LoginStatus _status = const LoginStatus();
+  bool _busy = false;
+
+  // Reload after each sync or sign-in (the background may have signed in).
+  DateTime? _seenSync;
+  bool? _seenExpired;
+
+  Future<void> _load() async {
+    final storage = context.read<AppState>().storage;
+    final login = await Secrets.read(Secrets.lmsLogin);
+    final pass = await Secrets.read(Secrets.lmsPassword);
+    final status = await BackgroundLogin.status(storage);
+    if (!mounted) return;
+    setState(() {
+      _login = login;
+      _hasPassword = (pass ?? '').isNotEmpty;
+      _status = status;
+    });
+  }
+
+  bool get _saved => (_login ?? '').isNotEmpty && _hasPassword;
+
+  String _when(DateTime t, S s) =>
+      dateOnly(t) == dateOnly(DateTime.now()) ? fmtTime(t) : fmtDateTime(t, s.lang);
+
+  Future<void> _edit() async {
+    final app = context.read<AppState>();
+    final s = S.read(context);
+    final login = TextEditingController(text: _login ?? '');
+    final pass = TextEditingController();
+    var show = false;
+    final saved = _saved;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) {
+        final ready = login.text.trim().isNotEmpty && (pass.text.isNotEmpty || _hasPassword);
+        return AlertDialog(
+          title: Text(s['slSaved']),
+          content: SizedBox(
+            width: 380,
+            child: AutofillGroup(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                TextField(
+                  controller: login,
+                  autofillHints: const [AutofillHints.username],
+                  textInputAction: TextInputAction.next,
+                  decoration: InputDecoration(labelText: s['slLogin'], prefixIcon: const Icon(Icons.badge_outlined)),
+                  onChanged: (_) => setDialog(() {}),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: pass,
+                  obscureText: !show,
+                  autofillHints: const [AutofillHints.password],
+                  decoration: InputDecoration(
+                    labelText: s['slPassword'],
+                    helperText: _hasPassword ? s['slKeepPassword'] : null,
+                    prefixIcon: const Icon(Icons.password_rounded),
+                    suffixIcon: IconButton(
+                      icon: Icon(show ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                      onPressed: () => setDialog(() => show = !show),
+                    ),
+                  ),
+                  onChanged: (_) => setDialog(() {}),
+                  onSubmitted: (_) {
+                    if (ready) Navigator.pop(ctx, 'save');
+                  },
+                ),
+                const SizedBox(height: 12),
+                Text(s['slStoredSafely'], style: TextStyle(fontSize: 12.5, color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+              ]),
+            ),
+          ),
+          actions: [
+            if (saved) TextButton(onPressed: () => Navigator.pop(ctx, 'remove'), child: Text(s['slRemove'])),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(s['cancel'])),
+            FilledButton(onPressed: ready ? () => Navigator.pop(ctx, 'save') : null, child: Text(s['save'])),
+          ],
+        );
+      }),
+    );
+    final l = login.text, p = pass.text;
+    login.dispose();
+    pass.dispose();
+    if (action == 'save') {
+      await app.saveLogin(l, p);
+    } else if (action == 'remove') {
+      await app.forgetLogin();
+    }
+    await _load();
+  }
+
+  Future<void> _tryNow() async {
+    final app = context.read<AppState>();
+    final s = S.read(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    final ok = await app.signInNow();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    messenger.showSnackBar(SnackBar(content: Text(ok ? s['slTryOk'] : s['slTryFail'])));
+    await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = context.watch<AppState>();
+    final s = S.of(context);
+    final st = app.settings;
+    if (_seenSync != app.snapshot.updatedAt || _seenExpired != app.sessionExpired) {
+      _seenSync = app.snapshot.updatedAt;
+      _seenExpired = app.sessionExpired;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _load();
+      });
+    }
+    final auto = st.autoLogin && st.backgroundLogin;
+    final failing = _status.failures > 0 && _status.result != LoginResult.ok;
+    final why = switch (_status.result) {
+      LoginResult.refused => s['slWhyRefused'],
+      LoginResult.timeout => s['slWhyTimeout'],
+      _ => s['slWhyError'],
+    };
+    final okAt = _status.okAt;
+    final next = _status.nextTry;
+    return _Group([
+      _Row(
+        icon: Icons.key_rounded,
+        color: Brand.violet,
+        title: s['slSaved'],
+        subtitle: _saved ? s.f('slSavedAs', {'login': _login}) : s['slNotSaved'],
+        onTap: _edit,
+        trailing: TextButton(onPressed: _edit, child: Text(_saved ? s['slChange'] : s['slAdd'])),
+      ),
+      _SwitchRow(
+        icon: Icons.sync_lock_rounded,
+        color: Brand.success,
+        title: s['slAuto'],
+        subtitle: s['slAutoSub'],
+        value: auto,
+        onChanged: (v) {
+          st.autoLogin = v;
+          st.backgroundLogin = v;
+          app.touch();
+        },
+      ),
+      if (_saved && auto)
+        _Row(
+          icon: failing ? Icons.error_outline_rounded : Icons.verified_user_outlined,
+          color: failing ? Brand.warning : Brand.success,
+          title: failing
+              ? s.f('slFailed', {'why': why, 'time': next == null ? '—' : _when(next, s)})
+              : okAt != null
+                  ? s.f('slLastOk', {'time': _when(okAt, s)})
+                  : s['slNever'],
+          trailing: _busy
+              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4))
+              : TextButton(onPressed: _tryNow, child: Text(s['slTryNow'])),
+        ),
+    ]);
+  }
+}
+
+/// When LMS was last checked, how often it is checked, and "check everything now".
+class _SyncGroup extends StatelessWidget {
+  const _SyncGroup();
+
+  @override
+  Widget build(BuildContext context) {
+    final app = context.watch<AppState>();
+    final s = S.of(context);
+    final st = app.settings;
+    final snap = app.snapshot;
+    final at = snap.updatedAt, full = snap.fullAt;
+    final everything = at != null && full != null && at.difference(full).inSeconds.abs() < 120;
+    final open = min(st.checkMinutes, AppState.openCheckMinutes).clamp(5, 240);
+    final closedOn = st.notifications || Automation.active(st);
+    final failed = app.failedParts;
+    return _Group([
+      _Row(
+        icon: Icons.update_rounded,
+        color: Brand.info,
+        title: s['syLast'],
+        subtitle: [fmtAgo(at, s), if (everything) s['syEverything']].join(' · '),
+      ),
+      _Row(
+        icon: Icons.folder_copy_outlined,
+        color: Brand.violet,
+        title: s['syFullAt'],
+        subtitle: '${fmtAgo(full, s)} · ${s['syFullEvery']}',
+      ),
+      _Row(
+        icon: Icons.timer_outlined,
+        color: Brand.primary,
+        title: s.f(Platform.isAndroid ? 'syOpen' : 'syOpenPc', {'n': open}),
+        subtitle: Platform.isAndroid
+            ? (closedOn ? s.f('syClosed', {'n': max(15, st.checkMinutes)}) : s['syClosedOff'])
+            : null,
+      ),
+      if (failed.isNotEmpty)
+        _Row(
+          icon: Icons.sync_problem_rounded,
+          color: Brand.warning,
+          title: s.f('syPartsFailed', {'parts': syncPartLabels(failed, snap, s).join(', ')}),
+        ),
+      _Row(
+        icon: Icons.cloud_sync_rounded,
+        color: Brand.success,
+        title: s['syNow'],
+        onTap: app.syncing ? null : () => app.refresh(full: true),
+        trailing: app.syncing
+            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4))
+            : const Icon(Icons.chevron_right_rounded),
+      ),
+    ]);
+  }
+}
+
 class _Group extends StatelessWidget {
   const _Group(this.children);
   final List<Widget> children;
