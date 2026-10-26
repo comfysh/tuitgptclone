@@ -15,8 +15,11 @@ prepare() {
   copy TuitMate.apk "TuitMate-$VERSION.apk"
   copy TuitMate-Setup.exe "TuitMate-$VERSION-Setup.exe"
   copy TuitMate-windows-portable.zip "TuitMate-$VERSION-windows-portable.zip"
+  # Fixed names: the installer downloads releases/latest/download/<name>.
+  copy tuitmate-server-linux-x64 tuitmate-server-linux-x64
+  copy tuitmate-server-install.sh tuitmate-server-install.sh
   [ -f "$out/TuitMate-$VERSION.apk" ] || { echo "::error::No APK to publish"; exit 1; }
-  (cd "$out" && shopt -s nullglob && sha256sum -- *.apk *.exe *.zip > SHA256SUMS.txt)
+  (cd "$out" && shopt -s nullglob && sha256sum -- *.apk *.exe *.zip tuitmate-server-* > SHA256SUMS.txt)
 
   # "cert_sha256=…" and "own_key=true|false", written by the android job.
   local cert="" own_key="false"
@@ -41,6 +44,8 @@ prepare() {
     echo "| [\`$apk\`](https://github.com/$REPO/releases/download/$TAG/$apk) | **Android** 7.0 or newer: open it on the phone and allow installing apps from this source |"
     [ -f "$out/$exe" ] && echo "| [\`$exe\`](https://github.com/$REPO/releases/download/$TAG/$exe) | **Windows** 10 / 11 (64-bit) installer, no admin rights needed |"
     [ -f "$out/$zip" ] && echo "| [\`$zip\`](https://github.com/$REPO/releases/download/$TAG/$zip) | **Windows** without installing: unzip anywhere and run \`TuitMate.exe\` |"
+    [ -f "$out/tuitmate-server-install.sh" ] && echo "| [\`tuitmate-server-install.sh\`](https://github.com/$REPO/releases/download/$TAG/tuitmate-server-install.sh) | **Your own server** (Ubuntu VPS): installs MySQL 8 and the TuitMate server, see [server/README.md](https://github.com/$REPO/blob/main/server/README.md) |"
+    [ -f "$out/tuitmate-server-linux-x64" ] && echo "| [\`tuitmate-server-linux-x64\`](https://github.com/$REPO/releases/download/$TAG/tuitmate-server-linux-x64) | The server program (the installer downloads it) |"
     echo "| [\`SHA256SUMS.txt\`](https://github.com/$REPO/releases/download/$TAG/SHA256SUMS.txt) | Checksums of the files above |"
     echo
     echo "## Check your download"

@@ -2,7 +2,7 @@
 #define AppName "TuitMate"
 ; The release workflow passes the pubspec.yaml version with /DAppVersion=x.y.z.
 #ifndef AppVersion
-  #define AppVersion "1.3.0"
+  #define AppVersion "1.4.0"
 #endif
 
 [Setup]

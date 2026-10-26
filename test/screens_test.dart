@@ -36,6 +36,7 @@ import 'package:tuitmate/ui/inbox_screen.dart';
 import 'package:tuitmate/ui/nav.dart';
 import 'package:tuitmate/ui/news_screen.dart';
 import 'package:tuitmate/ui/schedule_screen.dart';
+import 'package:tuitmate/ui/server_page.dart' show showServerConnect;
 import 'package:tuitmate/ui/settings_screen.dart';
 import 'package:tuitmate/ui/theme_picker.dart';
 import 'package:tuitmate/ui/today_layout.dart';
@@ -215,6 +216,7 @@ void main() {
     'shell_study': () => const _StartAt(Dest.grades, HomeShell()),
     'ask': () => _AutoOpen(AskPalette.open),
     'theme_picker': () => _AutoOpen(showThemePicker),
+    'server_connect': () => _AutoOpen(showServerConnect),
     'today_customizer': () => _AutoOpen(showTodayCustomizer),
     'today_all': () => const _AllSections(TodayScreen()),
     'shell_start_inbox': () => const _StartHub('inbox', HomeShell()),

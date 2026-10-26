@@ -127,6 +127,9 @@ class Secrets {
   /// The owner's AES-256 automation key (base64), after admin unlock.
   static const adminKey = 'admin_key';
 
+  /// Connection to your TuitMate server: JSON {u: url, t: token, f: cert SHA-256}.
+  static const server = 'tm_server';
+
   static Future<String?> read(String k) async {
     try {
       return await _s.read(key: k);

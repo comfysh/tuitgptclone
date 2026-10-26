@@ -56,6 +56,7 @@ The app has four places and Ask (the middle button on phones, **Ctrl+K** on PC):
 | **Always up to date** | While the app is open (on PC also in the tray) it checks LMS every 10 minutes and whenever you come back to it; closed, Android checks every 15 minutes. Teacher files, profile and study plan are loaded again at least every hour. Parts that fail are retried automatically; if they still fail you see which ones. *Profile › Sync* shows when everything was checked and has **Check everything now**. |
 | **Themes** | Six themes, each light and dark: **Paper**, **Ocean**, **Lagoon**, **Plum**, **Terracotta**, **Graphite**, plus *pure black* for OLED screens at night (*Profile › Appearance › Theme*). |
 | **LMS website** | The full lms.tuit.uz inside the app, already signed in, for anything not covered above. |
+| **Your own server** (optional) | A small service for an Ubuntu VPS that keeps your LMS session alive and checks LMS **every 5 minutes into a MySQL 8 database**, day and night; the app takes the newest data from it. One-command install, encrypted session, pinned certificate, your password stays on the phone. Also a ready way to **learn MySQL** on your own data: [server/README.md](server/README.md). |
 | **Automation** (owner only) | Sends your LMS events (new tasks, deadlines, grades, NB, exams, files, news, a daily summary) to your own **n8n** workflow or server, **encrypted with AES-256-GCM** and signed. Includes a ready n8n workflow and a guide you can give to ChatGPT or Codex: [docs/AUTOMATION.md](docs/AUTOMATION.md). |
 | Languages | O'zbekcha, Русский, English · light / dark theme |
 
@@ -68,6 +69,7 @@ All files are on the [**Releases**](https://github.com/comfysh/tuitgptclone/rele
 | `TuitMate-<version>.apk` | Android 7.0 or newer |
 | `TuitMate-<version>-Setup.exe` | Windows 10 / 11 (64-bit) installer |
 | `TuitMate-<version>-windows-portable.zip` | Windows without installing |
+| `tuitmate-server-install.sh` | Optional: installs your own server with MySQL on an Ubuntu VPS ([guide](server/README.md)) |
 | `SHA256SUMS.txt` | Checksums to check the files (see [SECURITY.md](SECURITY.md)) |
 
 ### Android
@@ -170,7 +172,7 @@ Then turn it into one line of text:
 
 ```
 lib/
-  lms/        LMS client (session cookies, endpoints), HTML/JSON parsers, data snapshot, change detection
+  lms/        re-exports packages/tuitmate_lms (LMS client, parsers, snapshot, change detection)
   core/       settings, storage (cache + keystore), timetable/odd-even week + attendance math, grade forecast and
               expected grade, file library, texts (uz/ru/en), formatting
   services/   notifications, background checks (WorkManager) and background sign-in, Inbox (change history),
@@ -182,6 +184,8 @@ lib/
 android/…/TuitWidgetProvider.kt   the home-screen widget
 test/         parser and logic tests, and every screen rendered at phone / PC size and in dark mode (flutter test)
 docs/AUTOMATION.md, docs/automation/   automation guide, n8n workflow, Node.js / Python decoders
+packages/tuitmate_lms/   LMS client, parsers, snapshot, change detection (shared by the app and the server)
+server/       TuitMate server: Dart service + MySQL schema, installer, MySQL practice (server/README.md)
 ```
 
 ## If something looks wrong

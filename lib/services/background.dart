@@ -14,6 +14,7 @@ import '../lms/changes.dart';
 import 'automation.dart';
 import 'background_login.dart';
 import 'notifier.dart';
+import 'server_link.dart';
 
 const _taskName = 'lms-check';
 
@@ -38,8 +39,8 @@ void callbackDispatcher() {
 /// One background check: download a snapshot (everything, when teacher files
 /// and the rest are older than [fullSyncEvery]; otherwise the parts that
 /// change during the day), compare, notify, and send automation events. When
-/// LMS has ended the session it signs in again with the saved password first
-/// (see BackgroundLogin).
+/// LMS has ended the session it takes the session your TuitMate server keeps
+/// alive, or signs in again with the saved password (see BackgroundLogin).
 Future<void> runLmsCheck() async {
   final settings = await Settings.load(reload: true);
   if (!settings.notifications && !Automation.active(settings)) return;
@@ -50,17 +51,20 @@ Future<void> runLmsCheck() async {
   if (prev == null && !await client.hasSession()) return;
 
   final full = prev == null || needsFullSync(prev, DateTime.now());
-  Future<LmsSnapshot> fetch() => fetchSnapshot(client, previous: prev, semesterId: settings.semesterId, full: full);
+  // From your TuitMate server when it has recent data, otherwise LMS directly.
+  Future<LmsSnapshot> fetch() async =>
+      (await fetchLatest(client, previous: prev, semesterId: settings.semesterId, full: full)).$1;
   LmsSnapshot now;
   try {
-    // The cookie jar drops the session cookie once it expires (LMS keeps it ~2 h).
-    if (!await client.hasSession()) throw SessionExpiredException();
     now = await fetch();
   } on SessionExpiredException {
-    if (!await BackgroundLogin.run(client, settings, storage)) {
+    // The server's session (the same one, kept alive by its checks), else sign in again.
+    final adopted = await adoptServerSession(client);
+    if (!adopted && !await BackgroundLogin.run(client, settings, storage)) {
       await Notifier.notifySessionExpired(settings, storage);
       return;
     }
+    if (!adopted) await shareSessionIfNeeded(client, force: true);
     try {
       now = await fetch();
     } on SessionExpiredException {

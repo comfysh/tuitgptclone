@@ -1,0 +1,13 @@
+name: tuitmate_lms
+description: TUIT LMS client, parsers, data snapshot and change detection, shared by the TuitMate app and server.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  dio: ^5.11.1
+  dio_cookie_manager: ^3.5.0
+  cookie_jar: ^4.0.9
+  html: ^0.15.7

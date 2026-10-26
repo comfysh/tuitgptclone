@@ -16,9 +16,11 @@ import '../lms/models.dart';
 import '../services/automation.dart';
 import '../services/background_login.dart';
 import '../services/notifier.dart';
+import '../services/server_link.dart';
 import 'ai_settings_page.dart';
 import 'automation_page.dart';
 import 'lms_web_page.dart';
+import 'server_page.dart';
 import 'theme_picker.dart';
 import 'widgets.dart';
 
@@ -947,7 +949,7 @@ class _SyncGroup extends StatelessWidget {
         icon: Icons.update_rounded,
         color: Brand.info,
         title: s['syLast'],
-        subtitle: [fmtAgo(at, s), if (everything) s['syEverything']].join(' · '),
+        subtitle: [fmtAgo(at, s), if (everything) s['syEverything'], if (app.fromServer) s['srvVia']].join(' · '),
       ),
       _Row(
         icon: Icons.folder_copy_outlined,
@@ -969,6 +971,7 @@ class _SyncGroup extends StatelessWidget {
           color: Brand.warning,
           title: s.f('syPartsFailed', {'parts': syncPartLabels(failed, snap, s).join(', ')}),
         ),
+      const _ServerRow(),
       _Row(
         icon: Icons.cloud_sync_rounded,
         color: Brand.success,
@@ -979,6 +982,53 @@ class _SyncGroup extends StatelessWidget {
             : const Icon(Icons.chevron_right_rounded),
       ),
     ]);
+  }
+}
+
+/// Your TuitMate server: connect, or open its page.
+class _ServerRow extends StatefulWidget {
+  const _ServerRow();
+
+  @override
+  State<_ServerRow> createState() => _ServerRowState();
+}
+
+class _ServerRowState extends State<_ServerRow> {
+  ServerConfig? _config;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final c = await ServerLink.load();
+    if (mounted) setState(() => _config = c);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = S.of(context);
+    final c = _config;
+    return _Row(
+      icon: Icons.dns_outlined,
+      color: Brand.violet,
+      title: s['srvTitle'],
+      subtitle: c == null ? s['srvNotConnected'] : s.f('srvConnectedTo', {'host': c.host}),
+      onTap: () async {
+        await openServer(context);
+        await _load();
+      },
+      trailing: c == null
+          ? TextButton(
+              onPressed: () async {
+                await openServer(context);
+                await _load();
+              },
+              child: Text(s['srvConnect']))
+          : const Icon(Icons.chevron_right_rounded),
+    );
   }
 }
 

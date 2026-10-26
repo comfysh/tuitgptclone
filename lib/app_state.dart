@@ -17,6 +17,7 @@ import 'services/background_login.dart';
 import 'services/home_widget_service.dart';
 import 'services/inbox.dart';
 import 'services/notifier.dart';
+import 'services/server_link.dart';
 import 'services/web_env.dart';
 import 'ui/themes.dart';
 
@@ -46,6 +47,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   bool syncing = false;
   bool sessionExpired = false;
+
+  /// The last sync's data came from your TuitMate server (not LMS directly).
+  bool fromServer = false;
+  DateTime? _sessionSharedAt;
   String? lastError;
   Timer? _timer;
   Timer? _retryTimer;
@@ -206,6 +211,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await client.importCookies(cookies);
     loggedIn = true;
     sessionExpired = false;
+    unawaited(shareSessionIfNeeded(client, force: true)); // your server keeps it alive
     unawaited(BackgroundLogin.reset(storage)); // signed in by hand: background re-login may try again
     notifyListeners();
     await Notifier.requestPermission();
@@ -234,7 +240,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       final old = snapshot;
       // A light check loads everything when teacher files etc. are an hour old.
       final everything = full || needsFullSync(old, DateTime.now());
-      final fresh = await fetchSnapshot(client, previous: old, semesterId: settings.semesterId, full: everything);
+      // From your server when it has recent data (a refresh you asked for
+      // makes it check LMS first), otherwise from LMS directly.
+      final (fresh, viaServer) = await fetchLatest(client,
+          previous: old, semesterId: settings.semesterId, full: everything, askServerNow: !silent);
       if (!loggedIn || client.epoch != epoch) return; // signed out meanwhile: drop the result
       // The Android worker may have saved (and notified) while we fetched;
       // diff against the newest copy so nothing is announced twice.
@@ -245,8 +254,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       }
       if (!loggedIn || client.epoch != epoch) return;
       snapshot = fresh;
+      fromServer = viaServer;
       sessionExpired = false;
       lastError = null;
+      // LMS answered the app directly: make sure the server has a session too.
+      if (!viaServer && (_sessionSharedAt == null || DateTime.now().difference(_sessionSharedAt!) > const Duration(minutes: 10))) {
+        _sessionSharedAt = DateTime.now();
+        unawaited(shareSessionIfNeeded(client));
+      }
       if (fresh.errors.isEmpty) {
         _retries = 0;
         _retryTimer?.cancel();
@@ -269,10 +284,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       }
     } on SessionExpiredException {
       if (loggedIn && client.epoch == epoch) {
-        // Sign in again without asking (invisible login page), then sync once more.
-        if (!_reloggedIn && await BackgroundLogin.run(client, settings, storage) && loggedIn && client.epoch == epoch) {
+        // Take the server's session (the same one, kept alive by its checks),
+        // else sign in again without asking (invisible login page); then sync once more.
+        final adopted = !_reloggedIn && await adoptServerSession(client);
+        final relogged = !_reloggedIn && !adopted && await BackgroundLogin.run(client, settings, storage);
+        if ((adopted || relogged) && loggedIn && client.epoch == epoch) {
           _reloggedIn = true;
           _refreshAgain = true;
+          if (relogged) unawaited(shareSessionIfNeeded(client, force: true));
         } else {
           sessionExpired = true;
           // On Windows the window may be hidden in the tray: say so once.
@@ -324,6 +343,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final ok = await BackgroundLogin.run(client, settings, storage, force: true);
     if (ok && loggedIn) {
       sessionExpired = false;
+      unawaited(shareSessionIfNeeded(client, force: true));
       unawaited(refresh());
     }
     notifyListeners();
@@ -403,7 +423,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       await HomeWidgetService.clear(); // nothing personal on the home screen
       await WebEnv.clearCookies();
       await storage.clearAll();
+      await ServerLink.dropSession(); // the server stops using this account's session
       await Secrets.deleteAll();
+      ServerLink.forget();
       settings.adminUnlocked = false; // the automation key went with the other secrets
     } finally {
       wiping = false;

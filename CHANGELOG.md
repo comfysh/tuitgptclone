@@ -4,6 +4,28 @@ All notable changes to TuitMate. The release notes on GitHub are taken from this
 add a section `## [x.y.z] - date` and raise `version:` in `pubspec.yaml` (and `lib/core/version.dart`)
 to publish a new release.
 
+## [1.4.0] - 2026-10-26
+
+Your own server with a MySQL database: it checks LMS every 5 minutes, day and night.
+
+### Highlights
+- **TuitMate server** (`server/`, for an Ubuntu VPS): a small service that keeps your LMS session
+  alive and checks LMS every 5 minutes, storing everything in **MySQL 8**: each check's data
+  (JSON), what changed, your courses, tasks, NB, exams, classes and news as normal tables, and a
+  log of every check. One command installs it (`tuitmate-server-install.sh` from the release):
+  MySQL, the service, an encryption key, a self-signed certificate and a connection code.
+- **Connect the app** (*Profile › Sync › TuitMate server*): paste the code. The app then takes the
+  newest data from your server (and asks it to check LMS right away when you refresh), hands it its
+  LMS session after you sign in, and takes the session back when its own copy expires, so it rarely
+  has to sign in. Without the server, or when it is off, the app goes to LMS directly as before.
+- **Your password stays on the phone**: the server never signs in to LMS itself; it only keeps the
+  session the app gives it alive. The session is stored encrypted (AES-256-GCM, key outside the
+  database); the app pins the server's certificate and uses a token stored on the server only as a hash.
+- **Learn MySQL with your own data**: `server/sql/schema.sql` explains every table,
+  `server/sql/practice.sql` has queries from `SELECT` to `JOIN`, `GROUP BY`, time zones and JSON,
+  and `server/README.md` shows where the database is and how to open it from your PC (SSH tunnel).
+- The LMS code is now a shared package (`packages/tuitmate_lms`) used by both the app and the server.
+
 ## [1.3.0] - 2026-10-26
 
 Signs in by itself, checks more often and more completely, six themes, and a Today screen you arrange yourself.
