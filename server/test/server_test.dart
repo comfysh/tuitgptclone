@@ -200,6 +200,22 @@ SELECT 1''');
       expect(await count('assignments'), 4);
     });
 
+    test('a failed transaction rolls back and gives its connection back', () async {
+      final a = await store.ensureAccount();
+      for (var i = 0; i < 8; i++) {
+        // More failures than the pool has connections (4).
+        await expectLater(
+          db.tx((c) async {
+            await c.execute("INSERT INTO news (account_id, title) VALUES (:a, 'half-written')", {'a': a});
+            await c.execute('INSERT INTO no_such_table VALUES (1)');
+          }),
+          throwsA(anything),
+        );
+      }
+      final n = await db.q("SELECT COUNT(*) AS n FROM news WHERE title = 'half-written'");
+      expect(n.rows.single.colByName('n'), '0');
+    });
+
     test('only the newest snapshots are kept', () async {
       final a = await store.ensureAccount();
       for (var i = 0; i < 5; i++) {

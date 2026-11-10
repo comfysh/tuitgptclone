@@ -12,9 +12,9 @@ import '../lms/snapshot.dart';
 import 'home_widget_service.dart';
 import '../lms/changes.dart';
 import 'automation.dart';
-import 'background_login.dart';
 import 'notifier.dart';
 import 'server_link.dart';
+import 'session_renewal.dart';
 
 const _taskName = 'lms-check';
 
@@ -58,13 +58,11 @@ Future<void> runLmsCheck() async {
   try {
     now = await fetch();
   } on SessionExpiredException {
-    // The server's session (the same one, kept alive by its checks), else sign in again.
-    final adopted = await adoptServerSession(client);
-    if (!adopted && !await BackgroundLogin.run(client, settings, storage)) {
+    // Your server's session or a silent sign-in with the saved password.
+    if (!await renewLmsSession(client, settings, storage)) {
       await Notifier.notifySessionExpired(settings, storage);
       return;
     }
-    if (!adopted) await shareSessionIfNeeded(client, force: true);
     try {
       now = await fetch();
     } on SessionExpiredException {

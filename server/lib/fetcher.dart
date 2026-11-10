@@ -34,7 +34,11 @@ class Fetcher {
   /// One check of [account]; a check already running is joined, not repeated.
   Future<FetchOutcome> run(int account, {bool full = false}) =>
       // The callback must not return the removed future: whenComplete would wait for it (itself).
-      _running[account] ??= _run(account, full).whenComplete(() {
+      _running[account] ??= _run(account, full).catchError((Object e) {
+        // E.g. the database was restarting: this check is lost, the next one runs as usual.
+        log('account $account: check could not run: $e');
+        return FetchOutcome.failed;
+      }).whenComplete(() {
         _running.remove(account);
       });
 

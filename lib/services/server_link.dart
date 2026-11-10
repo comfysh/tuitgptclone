@@ -219,6 +219,8 @@ Future<(LmsSnapshot, bool)> fetchLatest(
       final got = await ServerLink.snapshot(server);
       if (got != null) {
         final (at, snap) = got;
+        // Servers before 1.4.1 wrote this time in their own time zone.
+        snap.updatedAt = at;
         final recent = DateTime.now().difference(at) < serverSnapshotMaxAge;
         final notOlder = previous?.updatedAt == null || !at.isBefore(previous!.updatedAt!);
         if (recent && notOlder) return (snap, true);
@@ -227,7 +229,7 @@ Future<(LmsSnapshot, bool)> fetchLatest(
       // Server unreachable: LMS directly.
     }
   }
-  // The cookie jar drops the session cookie once it expires (LMS keeps it ~2 h).
+  // Never signed in on this device (or signed out).
   if (!await client.hasSession()) throw SessionExpiredException();
   return (await fetchSnapshot(client, previous: previous, semesterId: semesterId, full: full), false);
 }

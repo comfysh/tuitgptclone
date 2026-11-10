@@ -6,7 +6,7 @@ import 'dart:io';
 import 'fetcher.dart';
 import 'store.dart';
 
-const serverVersion = '1.4.0';
+const serverVersion = '1.4.1';
 
 /// The HTTPS API the app talks to. Every call (except /health) needs
 /// `Authorization: Bearer <token>` (a token from `tuitmate-server new-token`).

@@ -4,6 +4,30 @@ All notable changes to TuitMate. The release notes on GitHub are taken from this
 add a section `## [x.y.z] - date` and raise `version:` in `pubspec.yaml` (and `lib/core/version.dart`)
 to publish a new release.
 
+## [1.4.1] - 2026-11-10
+
+Fixes "session expired" and other bugs found in a review of the whole app and server.
+
+### Fixed
+- **You stay signed in.** The app treated you as signed out whenever the LMS cookie's 2-hour expiry
+  passed on the device: after the app was closed for 2 hours it opened on the sign-in screen, and with a
+  wrong clock or time zone on the device it happened right after signing in. Cookies are now kept until
+  LMS itself replaces them, and an ended session is renewed silently instead of sending you to sign in.
+- **Opening or uploading a file after a break** no longer fails with "session expired": the session is
+  renewed silently and the action is repeated once.
+- **The app and its background check no longer undo each other's sign-in.** A "not signed in" answer
+  from LMS used to overwrite the saved session with a visitor cookie, also one the other half had just
+  renewed; each half now picks up the session the other saved.
+- **A sign-in is only accepted when LMS confirms it.** LMS gives visitors a session cookie too; taking
+  one from the login page or the in-app LMS browser could sign the app out.
+- **The in-app LMS website opens signed in**: it gets the app's live session instead of its own copy
+  that ended 2 hours after sign-in, and no longer overwrites the app's session while you browse.
+- **Automatic sign-in is more patient**: it waits for the login page's own check (up to 8 seconds)
+  before pressing the button, and presses once more if the page came back without an error.
+- With a TuitMate server in another time zone, "last check" times were shown shifted by the difference.
+- Server: a failed database transaction no longer costs a connection for good (after four the server
+  would have stopped answering); a check that cannot start (database restarting) no longer stops the service.
+
 ## [1.4.0] - 2026-10-26
 
 Your own server with a MySQL database: it checks LMS every 5 minutes, day and night.

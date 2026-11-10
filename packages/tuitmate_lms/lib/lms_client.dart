@@ -36,7 +36,7 @@ class LmsClient {
   int get epoch => _epoch;
   int _epoch = 0;
 
-  LmsClient(String cookieDir) : cookieJar = PersistCookieJar(storage: FileStorage(cookieDir)) {
+  LmsClient(String cookieDir) : cookieJar = SessionCookieJar(storage: FileStorage(cookieDir)) {
     _dio = Dio(BaseOptions(
       baseUrl: lmsBase,
       connectTimeout: const Duration(seconds: 20),
@@ -57,6 +57,11 @@ class LmsClient {
         if (r.requestOptions.extra['epoch'] != _epoch) {
           h.reject(DioException(requestOptions: r.requestOptions, message: 'Signed out'));
         } else {
+          // With "you are not signed in" LMS also sends a fresh visitor
+          // cookie. Keeping it would overwrite the saved session, which the
+          // app's other half (background check) may just have renewed.
+          final code = r.statusCode ?? 0;
+          if (code == 401 || code == 419 || _isLoginRedirect(r)) r.headers.removeAll('set-cookie');
           h.next(r);
         }
       },
@@ -84,6 +89,45 @@ class LmsClient {
   }
 
   Future<List<Cookie>> currentCookies() => cookieJar.loadForRequest(lmsUri);
+
+  /// Asks LMS whether the stored session is still signed in (one small
+  /// request). Throws on network problems: "don't know" is not "no".
+  Future<bool> isSignedIn() async => signedInWith(await currentCookies());
+
+  /// Whether LMS accepts [cookies] as a signed-in session. Used before
+  /// trusting cookies taken from a browser: LMS also gives visitors who are
+  /// not signed in a session cookie.
+  static Future<bool> signedInWith(List<Cookie> cookies) async {
+    if (!cookies.any((c) => c.name.toLowerCase().contains('session'))) return false;
+    final dio = Dio(BaseOptions(
+      baseUrl: lmsBase,
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 30),
+      followRedirects: false,
+      validateStatus: (s) => s != null && s < 600,
+    ));
+    try {
+      // An XHR to a student-only address: 401 (or a redirect to the login
+      // page) without a session; anything else means LMS knows who we are.
+      final r = await dio.get<dynamic>(
+        '/student/my-courses/data?semester_id=0',
+        options: Options(responseType: ResponseType.plain, headers: {
+          'User-Agent': userAgent,
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Cookie': cookies.map((c) => '${c.name}=${c.value}').join('; '),
+        }),
+      );
+      final code = r.statusCode ?? 0;
+      if (code == 401 || code == 419) return false;
+      if (code >= 300 && code < 400) return false;
+      if (code >= 500) throw LmsException('LMS returned HTTP $code');
+      final body = '${r.data ?? ''}';
+      return !isLoginPage(body);
+    } finally {
+      dio.close();
+    }
+  }
 
   Future<void> logout() async {
     _epoch++;
@@ -239,12 +283,26 @@ class LmsClient {
 
   /// Downloads a file (teacher materials, your uploads) with your session.
   Future<Uint8List> download(String url, {void Function(int, int)? onProgress}) async {
-    final r = await _dio.get<List<int>>(
-      absoluteUrl(url),
-      options: Options(responseType: ResponseType.bytes, followRedirects: true, maxRedirects: 5),
-      onReceiveProgress: onProgress,
-    );
-    if (_isLoginRedirect(r)) throw SessionExpiredException();
+    // Redirects are followed by hand so that one to the login page is seen
+    // (and its visitor cookie not kept).
+    var target = absoluteUrl(url);
+    late Response<List<int>> r;
+    for (var hop = 0;; hop++) {
+      r = await _dio.get<List<int>>(
+        target,
+        options: Options(responseType: ResponseType.bytes),
+        onReceiveProgress: onProgress,
+      );
+      final code = r.statusCode ?? 0;
+      if (code == 401 || code == 419 || _isLoginRedirect(r)) throw SessionExpiredException();
+      final loc = r.headers.value('location');
+      if (code >= 300 && code < 400 && loc != null) {
+        if (hop >= 5) throw LmsException('Too many redirects for the download');
+        target = Uri.parse(target).resolve(loc).toString();
+        continue;
+      }
+      break;
+    }
     if ((r.statusCode ?? 0) >= 400) throw LmsException('Download failed (HTTP ${r.statusCode})');
     final ct = r.headers.value('content-type') ?? '';
     final bytes = Uint8List.fromList(r.data ?? const []);
@@ -276,4 +334,33 @@ Cookie makeCookie(String name, String value, {String? domain, String? path, num?
   c.httpOnly = httpOnly ?? false;
   c.secure = secure ?? true;
   return c;
+}
+
+/// Cookie store that never ends the LMS session by the device's clock.
+///
+/// LMS gives its session cookie a 2-hour expiry and renews it with every
+/// answer. A cookie store that honours that expiry forgets the session after
+/// 2 hours without requests (the app then looks signed out), or at once when
+/// the device's clock or time zone is wrong. LMS itself decides whether a
+/// session is still valid, so cookies are kept until LMS replaces or deletes
+/// them.
+class SessionCookieJar extends PersistCookieJar {
+  SessionCookieJar({super.storage});
+
+  @override
+  Future<void> saveFromResponse(Uri uri, List<Cookie> cookies) =>
+      super.saveFromResponse(uri, [for (final c in cookies) keepUntilReplaced(c)]);
+
+  /// [c] without its expiry, unless the server is deleting it (Max-Age 0 or
+  /// a date long in the past).
+  static Cookie keepUntilReplaced(Cookie c) {
+    final deleting = (c.maxAge != null && c.maxAge! <= 0) ||
+        (c.expires != null && c.expires!.isBefore(DateTime.now().subtract(const Duration(days: 2))));
+    if (deleting) return c;
+    return Cookie(c.name, c.value)
+      ..domain = c.domain
+      ..path = c.path
+      ..httpOnly = c.httpOnly
+      ..secure = c.secure;
+  }
 }

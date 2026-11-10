@@ -116,7 +116,7 @@ class BackgroundLogin {
     final pass = await Secrets.read(Secrets.lmsPassword);
     if (login == null || pass == null) return LoginResult.error;
     final done = Completer<LoginResult>();
-    var submitted = false;
+    var submits = 0;
 
     Future<void> capture(InAppWebViewController c) async {
       if (done.isCompleted) return;
@@ -129,6 +129,14 @@ class BackgroundLogin {
         } catch (_) {}
       }
       if (!cookies.any((k) => k.name.toLowerCase().contains('session'))) return;
+      // LMS gives visitors a session cookie too: trust it only when LMS
+      // answers it as signed in (otherwise keep waiting for the sign-in).
+      try {
+        if (!await LmsClient.signedInWith(cookies)) return;
+      } catch (_) {
+        return;
+      }
+      if (done.isCompleted) return;
       await client.importCookies(cookies);
       if (!done.isCompleted) done.complete(LoginResult.ok);
     }
@@ -140,21 +148,16 @@ class BackgroundLogin {
         return;
       }
       if (url.host != 'lms.tuit.uz' || !url.path.startsWith('/auth/login')) return;
-      final error = await c.evaluateJavascript(source: "!!document.querySelector('[role=alert], .alert-danger')");
-      if (submitted) {
-        // Back on the login page after pressing the button: refused.
-        if (error == true && !done.isCompleted) done.complete(LoginResult.refused);
+      final error = await c.evaluateJavascript(source: "!!document.querySelector('[role=alert], .alert, .invalid-feedback, .text-danger, .help-block')");
+      if (submits > 0 && error == true) {
+        // Back on the login page with an error after pressing the button: refused.
+        if (!done.isCompleted) done.complete(LoginResult.refused);
         return;
       }
-      submitted = true;
-      await c.evaluateJavascript(source: '''
-(function(){
-  var l = document.getElementById('login'), p = document.getElementById('password');
-  if (l) l.value = ${jsonEncode(login)};
-  if (p) p.value = ${jsonEncode(pass)};
-  var n = 0; var t = setInterval(function(){ var b = document.getElementById('login-btn'); n++;
-    if (b && !b.disabled) { clearInterval(t); b.click(); } if (n > 60) clearInterval(t); }, 250);
-})();''');
+      // Back without an error (the page reloaded itself): press once more, then wait.
+      if (submits >= 2) return;
+      submits++;
+      await c.evaluateJavascript(source: fillAndSubmitJs(login, pass));
     }
 
     final view = HeadlessInAppWebView(
@@ -176,6 +179,22 @@ class BackgroundLogin {
     }
   }
 }
+
+/// Page script: fills in the login form and presses the button once the
+/// page has enabled it and its own reCAPTCHA check has had time to finish
+/// (up to 8 seconds; the page enables the button without it after 2.5).
+String fillAndSubmitJs(String login, String password) => '''
+(function(){
+  var l = document.getElementById('login'), p = document.getElementById('password');
+  if (l) l.value = ${jsonEncode(login)};
+  if (p) p.value = ${jsonEncode(password)};
+  var n = 0; var t = setInterval(function(){
+    var b = document.getElementById('login-btn'), r = document.getElementById('g-recaptcha-response'); n++;
+    var checked = !r || !!r.value || n > 32;
+    if (b && !b.disabled && checked) { clearInterval(t); b.click(); }
+    if (n > 80) clearInterval(t);
+  }, 250);
+})();''';
 
 /// How an automatic sign-in ended: signed in, LMS showed an error on the
 /// login page (wrong password or reCAPTCHA), no answer in time, or another

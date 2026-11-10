@@ -1,7 +1,7 @@
 name: tuitmate_server
 description: TuitMate server. Keeps your LMS session alive, fetches LMS data every few minutes into MySQL and serves it to the TuitMate app.
 publish_to: none
-version: 1.4.0
+version: 1.4.1
 
 environment:
   sdk: ^3.13.5

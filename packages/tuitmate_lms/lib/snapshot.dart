@@ -84,8 +84,10 @@ class LmsSnapshot {
         'lessons': lessons.map((k, v) => MapEntry('$k', v.map((e) => e.toJson()).toList())),
         'studyPlan': studyPlan.map((e) => e.toJson()).toList(),
         'news': news.map((e) => e.toJson()).toList(),
-        'updatedAt': updatedAt?.toIso8601String(),
-        'fullAt': fullAt?.toIso8601String(),
+        // Moments, not LMS wall-clock times: stored in UTC so a snapshot made on
+        // a server in another time zone means the same moment on the phone.
+        'updatedAt': updatedAt?.toUtc().toIso8601String(),
+        'fullAt': fullAt?.toUtc().toIso8601String(),
         'errors': errors,
         'weekRefMonday': weekRefMonday?.toIso8601String(),
         'weekRefSide': weekRefSide?.value,
@@ -110,8 +112,8 @@ class LmsSnapshot {
             .map((k, v) => MapEntry(int.parse('$k'), _list(v, Lesson.fromJson))),
         studyPlan: _list(j['studyPlan'], Discipline.fromJson),
         news: _list(j['news'], NewsItem.fromJson),
-        updatedAt: j['updatedAt'] == null ? null : DateTime.tryParse(j['updatedAt']),
-        fullAt: j['fullAt'] == null ? null : DateTime.tryParse(j['fullAt']),
+        updatedAt: j['updatedAt'] == null ? null : DateTime.tryParse(j['updatedAt'])?.toLocal(),
+        fullAt: j['fullAt'] == null ? null : DateTime.tryParse(j['fullAt'])?.toLocal(),
         errors: Map<String, String>.from(j['errors'] ?? const {}),
         weekRefMonday: j['weekRefMonday'] == null ? null : DateTime.tryParse(j['weekRefMonday']),
         weekRefSide: j['weekRefSide'] == null ? null : WeekSide.fromValue(j['weekRefSide']),

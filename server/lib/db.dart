@@ -27,7 +27,25 @@ class Db {
 
   Future<IResultSet> q(String sql, [Map<String, dynamic>? params]) => pool.execute(sql, params);
 
-  Future<T> tx<T>(Future<T> Function(MySQLConnection c) body) => pool.transactional(body);
+  /// Runs [body] in a transaction (rolled back when it throws). The pool
+  /// only takes a connection back when its callback returns, so the error is
+  /// carried out of the callback instead of thrown through it; otherwise
+  /// every failed transaction would cost the pool a connection for good.
+  Future<T> tx<T>(Future<T> Function(MySQLConnection c) body) async {
+    late T result;
+    Object? error;
+    StackTrace? trace;
+    await pool.withConnection((c) async {
+      try {
+        result = await c.transactional(body);
+      } catch (e, st) {
+        error = e;
+        trace = st;
+      }
+    });
+    if (error != null) Error.throwWithStackTrace(error!, trace!);
+    return result;
+  }
 
   /// Creates missing tables (sql/schema.sql; every statement is IF NOT EXISTS).
   Future<void> applySchema() async {

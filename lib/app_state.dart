@@ -18,6 +18,7 @@ import 'services/home_widget_service.dart';
 import 'services/inbox.dart';
 import 'services/notifier.dart';
 import 'services/server_link.dart';
+import 'services/session_renewal.dart';
 import 'services/web_env.dart';
 import 'ui/themes.dart';
 
@@ -82,7 +83,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final storage = await AppStorage.instance();
     final client = LmsClient(storage.cookieDir);
     final snap = await storage.loadSnapshot() ?? LmsSnapshot();
-    final loggedIn = await client.hasSession();
+    // Signed in until you sign out (which deletes the saved data): an LMS
+    // session that ended while the app was closed is renewed silently, it
+    // must not send you back to the sign-in screen.
+    final loggedIn = await client.hasSession() || !snap.isEmpty;
     return AppState(settings, storage, client, snap, loggedIn)..inbox = loggedIn ? await Inbox.load(storage) : const [];
   }
 
@@ -284,14 +288,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       }
     } on SessionExpiredException {
       if (loggedIn && client.epoch == epoch) {
-        // Take the server's session (the same one, kept alive by its checks),
-        // else sign in again without asking (invisible login page); then sync once more.
-        final adopted = !_reloggedIn && await adoptServerSession(client);
-        final relogged = !_reloggedIn && !adopted && await BackgroundLogin.run(client, settings, storage);
-        if ((adopted || relogged) && loggedIn && client.epoch == epoch) {
+        // Get a working session without asking (your server's, or a silent
+        // sign-in with the saved password), then sync once more.
+        final renewed = !_reloggedIn && await renewSession();
+        if (renewed && loggedIn && client.epoch == epoch) {
           _reloggedIn = true;
           _refreshAgain = true;
-          if (relogged) unawaited(shareSessionIfNeeded(client, force: true));
         } else {
           sessionExpired = true;
           // On Windows the window may be hidden in the tray: say so once.
@@ -320,6 +322,40 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  Future<bool>? _renewing;
+
+  /// Renews the LMS session silently (see [renewLmsSession]); callers at the
+  /// same moment share one attempt.
+  Future<bool> renewSession({bool force = false}) =>
+      _renewing ??= renewLmsSession(client, settings, storage, force: force).whenComplete(() {
+        _renewing = null;
+      });
+
+  /// Runs [action]; when LMS says the session is over, renews it silently and
+  /// runs [action] once more. Only if that fails too is the session shown as
+  /// expired.
+  Future<T> _withSession<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on SessionExpiredException {
+      if (loggedIn && await renewSession()) {
+        try {
+          final result = await action();
+          if (sessionExpired) {
+            sessionExpired = false;
+            notifyListeners();
+          }
+          return result;
+        } on SessionExpiredException {
+          // falls through
+        }
+      }
+      sessionExpired = true;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   /// Saves the LMS login and password for automatic sign-in (an empty
   /// [password] keeps the saved one).
   Future<void> saveLogin(String login, String? password) async {
@@ -340,10 +376,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// Signs in right now with the saved password ("Try now" in Profile).
   Future<bool> signInNow() async {
     if (!loggedIn) return false;
-    final ok = await BackgroundLogin.run(client, settings, storage, force: true);
+    final ok = await renewSession(force: true);
     if (ok && loggedIn) {
       sessionExpired = false;
-      unawaited(shareSessionIfNeeded(client, force: true));
       unawaited(refresh());
     }
     notifyListeners();
@@ -361,13 +396,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> upload(Assignment a, String fileName, Uint8List bytes) async {
-    try {
-      await client.upload(uploadId: a.uploadId!, courseId: a.courseId, fileName: fileName, bytes: bytes);
-    } on SessionExpiredException {
-      sessionExpired = true;
-      notifyListeners();
-      rethrow;
-    }
+    // LMS refuses an upload with an ended session before taking the file, so
+    // trying again after renewing can't upload twice.
+    await _withSession(() => client.upload(uploadId: a.uploadId!, courseId: a.courseId, fileName: fileName, bytes: bytes));
     final course = snapshot.courseById(a.courseId);
     if (course != null) {
       try {
@@ -386,13 +417,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<Uint8List> download(String url, {void Function(int, int)? onProgress}) async {
-    try {
-      return await client.download(url, onProgress: onProgress);
-    } on SessionExpiredException {
-      sessionExpired = true;
-      notifyListeners();
-      rethrow;
-    }
+    return _withSession(() => client.download(url, onProgress: onProgress));
   }
 
   /// Signs out and removes this account's data from the device: LMS session

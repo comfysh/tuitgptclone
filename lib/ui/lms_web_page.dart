@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
 
@@ -10,6 +11,7 @@ import '../core/storage.dart';
 import '../core/strings.dart';
 import '../lms/lms_client.dart';
 import '../lms/parsers.dart';
+import '../services/background_login.dart' show fillAndSubmitJs;
 import '../services/web_env.dart';
 import 'files.dart';
 import 'widgets.dart';
@@ -43,11 +45,50 @@ class _LmsWebPageState extends State<LmsWebPage> {
   /// Page being shown; only used to display its host in the title bar.
   WebUri? _url;
 
+  /// The browser may be created: the app's session has been given to it.
+  bool _ready = false;
+  bool _checking = false;
+
+  /// A page finished loading while a check was running: check once more.
+  bool _checkAgain = false;
+
   @override
   void initState() {
     super.initState();
     _url = WebUri(_startUrl);
-    _loadCreds();
+    _prepare();
+  }
+
+  Future<void> _prepare() async {
+    await _loadCreds();
+    if (!widget.loginMode) await _giveSessionToBrowser();
+    if (mounted) setState(() => _ready = true);
+  }
+
+  /// The embedded browser keeps its own cookies, and its copy of the session
+  /// ends 2 hours after sign-in although the app keeps the session alive.
+  /// Give it the app's live cookies so the site opens signed in.
+  Future<void> _giveSessionToBrowser() async {
+    try {
+      final app = context.read<AppState>();
+      if (app.sessionExpired) return;
+      final expires = DateTime.now().add(const Duration(hours: 2)).millisecondsSinceEpoch;
+      for (final c in await app.client.currentCookies()) {
+        await WebEnv.cookies
+            .setCookie(
+              url: WebUri(lmsBase),
+              name: c.name,
+              value: c.value,
+              path: c.path ?? '/',
+              isSecure: true,
+              isHttpOnly: c.httpOnly,
+              expiresDate: expires,
+            )
+            .timeout(const Duration(seconds: 3));
+      }
+    } catch (_) {
+      // The site then asks to sign in, as before.
+    }
   }
 
   void _showUrl(WebUri? url) {
@@ -101,15 +142,23 @@ class _LmsWebPageState extends State<LmsWebPage> {
       final hasError = await c.evaluateJavascript(source: "!!document.querySelector('[role=alert], .alert-danger')");
       if (app.settings.autoLogin && !_autoSubmitted && hasError != true) {
         _autoSubmitted = true;
-        await c.evaluateJavascript(source: '''
-(function(){ var n=0; var t=setInterval(function(){ var b=document.getElementById('login-btn'); n++;
-  if(b && !b.disabled){ clearInterval(t); b.click(); } if(n>40) clearInterval(t); }, 250); })();''');
+        await c.evaluateJavascript(source: fillAndSubmitJs(_savedLogin!, _savedPassword!));
       }
     }
   }
 
+  /// After a page of the signed-in site loads: take the browser's session
+  /// for the app. In the plain browser only when the app's own session is
+  /// over (otherwise the app's is the one being kept alive).
   Future<void> _captureSession(InAppWebViewController c) async {
     final app = context.read<AppState>();
+    if (_done) return;
+    if (!widget.loginMode && !app.sessionExpired) return;
+    if (_checking) {
+      _checkAgain = true;
+      return;
+    }
+    _checking = true;
     try {
       final raw = await WebEnv.cookies.getCookies(url: WebUri(lmsBase), webViewController: c);
       final cookies = <io.Cookie>[];
@@ -120,19 +169,39 @@ class _LmsWebPageState extends State<LmsWebPage> {
         } catch (_) {}
       }
       if (!cookies.any((k) => k.name.toLowerCase().contains('session'))) return;
+      // LMS gives visitors a session cookie too: only a session LMS answers
+      // as signed in counts (a wrong one would sign the app out).
+      if (!await _signedIn(cookies)) return;
       if (widget.loginMode) {
-        if (_done) return;
         _done = true;
         if (mounted) Navigator.of(context).pop(true);
         await app.onLoggedIn(cookies);
       } else {
         await app.client.importCookies(cookies);
-        if (app.sessionExpired) {
-          app.sessionExpired = false;
-          app.refresh(full: false, silent: true);
-        }
+        app.sessionExpired = false;
+        app.refresh(full: false, silent: true);
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _checking = false;
+      if (_checkAgain && !_done && mounted) {
+        _checkAgain = false;
+        unawaited(_captureSession(c));
+      }
+    }
+  }
+
+  /// Asks LMS; with no answer twice (bad connection) the sign-in page trusts
+  /// the browser, as it shows a signed-in page.
+  Future<bool> _signedIn(List<io.Cookie> cookies) async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await LmsClient.signedInWith(cookies);
+      } catch (_) {
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+      }
+    }
+    return widget.loginMode;
   }
 
   Future<DownloadStartResponse?> _onDownload(InAppWebViewController c, DownloadStartRequest req) async {
@@ -210,7 +279,9 @@ class _LmsWebPageState extends State<LmsWebPage> {
         children: [
           if (widget.loginMode) _LoginOptions(),
           Expanded(
-            child: InAppWebView(
+            child: !_ready
+                ? const SizedBox.shrink()
+                : InAppWebView(
               webViewEnvironment: WebEnv.env,
               initialUrlRequest: URLRequest(url: WebUri(_startUrl)),
               initialSettings: InAppWebViewSettings(
